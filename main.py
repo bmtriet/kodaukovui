@@ -332,7 +332,6 @@ root.mainloop()
     except Exception as ex:
         print(f"\n[LỖI NGHIÊM TRỌNG] Đã xảy ra lỗi trong quá trình xử lý hotkey: {ex}")
     finally:
-        global is_processing
         is_processing = False
 
 def on_press(key):
