@@ -1,0 +1,8 @@
+python-dotenv
+pynput
+pyperclip
+google-genai
+openai
+Pillow
+cairosvg
+pywebview
