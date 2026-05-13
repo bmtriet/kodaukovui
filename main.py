@@ -6,13 +6,15 @@ import threading
 import subprocess
 from dotenv import load_dotenv, set_key
 from pynput import keyboard
-import pyperclip
 from google import genai
 import openai
+from app_paths import get_resource_path, get_user_data_path
+from platform_adapter import create_platform_adapter
 
 # Load environment variables
-load_dotenv()
-env_file = os.path.join(os.path.dirname(__file__), '.env')
+BUNDLE_DIR = get_resource_path()
+env_file = str(get_user_data_path(".env"))
+load_dotenv(dotenv_path=env_file)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 HOTKEY = os.getenv("HOTKEY", "<ctrl>+<shift>+1")
@@ -24,14 +26,6 @@ HOTKEY_QA = os.getenv("HOTKEY_QA", "<ctrl>+<f12>")
 HOTKEY_POPUP = os.getenv("HOTKEY_POPUP", "<ctrl>+/")
 UI_LANGUAGE = os.getenv("UI_LANGUAGE", "en").lower()
 KEEP_ORIGINAL_TEXT = os.getenv("KEEP_ORIGINAL_TEXT", "false").lower() == "true"
-
-def normalize_hotkey(hk: str) -> str:
-    """Chuyển phím đặc biệt như '/' thành dạng chr() mà pynput X11 nhận được khi giữ Ctrl."""
-    import re
-    # Thay thế +/ ở cuối bằng +chr(47) để X11 nhận đúng khi Ctrl đang được giữ
-    return re.sub(r'\+/$', f'+{chr(47)}', hk)
-
-HOTKEY_POPUP = normalize_hotkey(HOTKEY_POPUP)
 SHOW_QUESTION_IN_QA = os.getenv("SHOW_QUESTION_IN_QA", "false").lower() == "true"
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
@@ -40,8 +34,8 @@ OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-HISTORY_FILE = "history.json"
-LEARNED_FILE = "learned.json"
+HISTORY_FILE = str(get_user_data_path("history.json"))
+LEARNED_FILE = str(get_user_data_path("learned.json"))
 HISTORY_LIMIT = 1000
 
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_token_here" else None
@@ -52,6 +46,8 @@ if not client and not openai_client:
     exit(1)
 
 controller = keyboard.Controller()
+PLATFORM = create_platform_adapter(controller=controller, debug=DEBUG)
+HOTKEY_POPUP = PLATFORM.normalize_hotkey(HOTKEY_POPUP)
 
 def load_history():
     if not os.path.exists(HISTORY_FILE):
@@ -108,8 +104,10 @@ def run_learning_mode():
     print(f"Hoàn tất! Đã cập nhật {count} mẫu mới từ người dùng vào {LEARNED_FILE}.\n")
 
 def load_brain_context():
-    brain_path = os.path.join(os.path.dirname(__file__), "brain.md")
-    if os.path.exists(brain_path):
+    brain_path = get_user_data_path("brain.md")
+    if not brain_path.exists():
+        brain_path = get_resource_path("brain.md")
+    if brain_path.exists():
         with open(brain_path, 'r', encoding='utf-8') as f:
             content = f.read().strip()
             # Bỏ qua phần hướng dẫn mặc định của hệ thống
@@ -155,23 +153,11 @@ def build_prompt(text, action_type="add_marks", custom_prompt="", custom_lang="A
         return base
     return ""
 
-def get_current_active_window():
-    try:
-        res = subprocess.run(["xdotool", "getactivewindow"], capture_output=True, text=True, timeout=0.5)
-        if res.returncode == 0 and res.stdout.strip():
-            return res.stdout.strip()
-    except Exception:
-        pass
-    return None
 
-def restore_focus(window_id):
-    if not window_id:
-        return
-    try:
-        subprocess.run(["xdotool", "windowactivate", window_id], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(0.15)
-    except Exception:
-        pass
+def build_webview_command(page: str, ui_lang: str):
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--webview", page, ui_lang]
+    return [sys.executable, str(BUNDLE_DIR / "webview_host.py"), page, ui_lang]
 
 is_processing = False
 
@@ -195,8 +181,10 @@ def on_activate(action_type="add_marks", pre_selected_text=None, target_window_i
         if pre_selected_text is not None:
             selected_text = pre_selected_text
         else:
-            selected_text = get_selected_text()
-                
+            selected_text, selection_error = PLATFORM.get_selected_text(target_window_id=target_window_id)
+            if selection_error:
+                print(selection_error)
+                return
             if not selected_text:
                 print("[LỖI] Không có văn bản nào để xử lý (chưa bôi đen và clipboard cũng trống).")
                 return
@@ -205,13 +193,10 @@ def on_activate(action_type="add_marks", pre_selected_text=None, target_window_i
             print(f"[DEBUG] Văn bản gốc: {selected_text}")
             
         if action_type == "add_marks":
-            pyperclip.copy("...")
-            time.sleep(0.05)
-            controller.press(keyboard.Key.ctrl)
-            controller.press('v')
-            controller.release('v')
-            controller.release(keyboard.Key.ctrl)
-            time.sleep(0.05)
+            placeholder_error = PLATFORM.prepare_add_marks_placeholder(target_window_id=target_window_id)
+            if placeholder_error:
+                print(placeholder_error)
+                return
         
         result_text = None
         
@@ -239,8 +224,7 @@ def on_activate(action_type="add_marks", pre_selected_text=None, target_window_i
             
             if action_type == "qa":
                 try:
-                    webview_script = os.path.join(os.path.dirname(__file__), "webview_host.py")
-                    res = subprocess.run(["python3", webview_script, "qa", UI_LANGUAGE], capture_output=True, text=True)
+                    res = subprocess.run(build_webview_command("qa", UI_LANGUAGE), capture_output=True, text=True)
                     if res.returncode == 0 and res.stdout.strip():
                         import json
                         data = json.loads(res.stdout.strip())
@@ -293,28 +277,15 @@ def on_activate(action_type="add_marks", pre_selected_text=None, target_window_i
                 question_text = custom_prompt if custom_prompt else selected_text
                 result_text = f"Hỏi:\n{question_text}\n\nĐáp:\n{result_text}"
         elif KEEP_ORIGINAL_TEXT and action_type != "add_marks":
-            result_text = f"{selected_text}\n---\n{result_text}"
+                result_text = f"{selected_text}\n---\n{result_text}"
             
         if target_window_id:
-            restore_focus(target_window_id)
+            PLATFORM.restore_focus(target_window_id)
 
-        pyperclip.copy(result_text)
-        
-        time.sleep(0.1)
-        
-        if action_type == "add_marks":
-            controller.press(keyboard.Key.shift)
-            for _ in range(3):
-                controller.press(keyboard.Key.left)
-                controller.release(keyboard.Key.left)
-                time.sleep(0.02)
-            controller.release(keyboard.Key.shift)
-            time.sleep(0.05)
-            
-        controller.press(keyboard.Key.ctrl)
-        controller.press('v')
-        controller.release('v')
-        controller.release(keyboard.Key.ctrl)
+        paste_error = PLATFORM.paste_processed_text(result_text, action_type=action_type, target_window_id=target_window_id)
+        if paste_error:
+            print(paste_error)
+            return
         
         print(f"[THÀNH CÔNG] Đã hoàn tất {action_names.get(action_type)}!")
     except Exception as ex:
@@ -326,52 +297,23 @@ def on_press(key):
     if DEBUG:
         print(f"[DEBUG] Bấm phím: {key}")
 
-def activate_add_marks(): on_activate("add_marks", target_window_id=get_current_active_window())
-def activate_trans_en(): on_activate("trans_en", target_window_id=get_current_active_window())
-def activate_trans_zhtw(): on_activate("trans_zhtw", target_window_id=get_current_active_window())
-def activate_trans_khmer(): on_activate("trans_khmer", target_window_id=get_current_active_window())
-def activate_trans_vi(): on_activate("trans_vi", target_window_id=get_current_active_window())
-def activate_qa(): on_activate("qa", target_window_id=get_current_active_window())
-
-def get_selected_text():
-    # 1. Thử lấy từ Primary Selection (Linux) trước (không can thiệp clipboard)
-    try:
-        result = subprocess.run(['xclip', '-o', '-selection', 'primary'], capture_output=True, text=True, timeout=1)
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except Exception:
-        pass
-        
-    # 2. Fallback: Dùng Ctrl+C như cũ
-    controller.release(keyboard.Key.shift)
-    controller.release(keyboard.Key.ctrl)
-    controller.release(keyboard.Key.alt)
-    
-    old_clipboard = pyperclip.paste()
-    controller.press(keyboard.Key.ctrl)
-    controller.press('c')
-    controller.release('c')
-    controller.release(keyboard.Key.ctrl)
-    
-    time.sleep(0.2)
-    selected_text = pyperclip.paste()
-    
-    if not selected_text and old_clipboard:
-        selected_text = old_clipboard
-        
-    return selected_text.strip() if selected_text else ""
+def activate_add_marks(): on_activate("add_marks", target_window_id=PLATFORM.get_current_active_window())
+def activate_trans_en(): on_activate("trans_en", target_window_id=PLATFORM.get_current_active_window())
+def activate_trans_zhtw(): on_activate("trans_zhtw", target_window_id=PLATFORM.get_current_active_window())
+def activate_trans_khmer(): on_activate("trans_khmer", target_window_id=PLATFORM.get_current_active_window())
+def activate_trans_vi(): on_activate("trans_vi", target_window_id=PLATFORM.get_current_active_window())
+def activate_qa(): on_activate("qa", target_window_id=PLATFORM.get_current_active_window())
 
 def show_popup_menu():
     global is_processing
     if is_processing: return
     is_processing = True
 
-    target_window_id = get_current_active_window()
+    target_window_id = PLATFORM.get_current_active_window()
 
-    popup_script = os.path.join(os.path.dirname(__file__), "webview_host.py")
     try:
         result = subprocess.run(
-            [sys.executable, popup_script, "popup", UI_LANGUAGE],
+            build_webview_command("popup", UI_LANGUAGE),
             capture_output=True, text=True
         )
         if result.stderr:
@@ -381,7 +323,11 @@ def show_popup_menu():
             is_processing = False
             return
         # Lấy text SAU khi user chọn action (primary selection vẫn còn nguyên)
-        selected_text = get_selected_text()
+        selected_text, selection_error = PLATFORM.get_selected_text(target_window_id=target_window_id)
+        if selection_error:
+            print(selection_error)
+            is_processing = False
+            return
         if not selected_text:
             print("[LỖI] Không có văn bản được chọn hoặc trong clipboard.")
             is_processing = False
@@ -529,7 +475,7 @@ def config_menu():
             elif c == '7': HOTKEY_TRANS_KHMER = new_hk
             elif c == '8': HOTKEY_TRANS_VI = new_hk
             elif c == '9': HOTKEY_QA = new_hk
-            elif c == '10': HOTKEY_POPUP = new_hk
+            elif c == '10': HOTKEY_POPUP = PLATFORM.normalize_hotkey(new_hk)
             print(f"Đã cập nhật {key_name} = {new_hk}")
             print("LƯU Ý: Vui lòng thoát ứng dụng và mở lại để áp dụng phím tắt mới!")
             
@@ -634,9 +580,17 @@ def tui_loop():
             time.sleep(1)
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == '--learn':
-        run_learning_mode()
-        return
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '--learn':
+            run_learning_mode()
+            return
+        if sys.argv[1] == '--webview':
+            from webview_host import run_webview_host
+
+            page = sys.argv[2] if len(sys.argv) > 2 else "qa"
+            ui_lang = sys.argv[3] if len(sys.argv) > 3 else UI_LANGUAGE
+            run_webview_host(page=page, ui_lang=ui_lang)
+            return
 
     # Chạy listener ở background
     listener_thread = threading.Thread(target=start_background_listener, daemon=True)

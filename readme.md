@@ -13,7 +13,14 @@
 ## Yêu cầu hệ thống
 - Python 3.10 trở lên
 - Node.js & npm (để phát triển/build UI React)
-- Môi trường Linux (với X11) hoặc Windows. Trên Linux yêu cầu xclip.
+- Môi trường Linux (với X11) hoặc Windows
+- Trên Linux yêu cầu `xclip`; nếu muốn khôi phục focus/popup theo vị trí chuột thì cần `xdotool`
+- Trên Windows, `pywebview` có thể cần browser runtime phù hợp trên một số máy
+
+## Chính sách hỗ trợ Windows
+- **Supported:** KoDauKoVui chạy bằng quyền user thường và ứng dụng đích cũng chạy bằng quyền user thường.
+- **Limited / unsupported:** tương tác với ứng dụng chạy `Run as administrator` hoặc cửa sổ/UAC ở mức quyền cao hơn.
+- Đóng gói thành `.exe` **không tự động vượt qua giới hạn quyền Windows**. Nếu cửa sổ đích chạy elevated, KoDauKoVui sẽ báo lỗi có kiểm soát thay vì cố dán thất bại âm thầm.
 
 ## Cài đặt và Chạy ứng dụng
 
@@ -44,6 +51,51 @@ chmod +x run.sh
    python3 main.py
    ```
 
+### Chạy trên Windows bằng Python
+1. Build Web UI nếu bạn vừa sửa React UI:
+   ```powershell
+   cd webui
+   npm install
+   npm run build
+   cd ..
+   ```
+2. Chạy script:
+   ```powershell
+   run_windows.bat
+   ```
+3. Hoặc chạy tay:
+   ```powershell
+   py -3 -m venv venv
+   venv\Scripts\activate
+   python -m pip install -r requirements.txt
+   python main.py
+   ```
+
+### Đóng gói `.exe` one-folder cho Windows
+1. Đảm bảo `webui/dist/` đã có:
+   ```powershell
+   cd webui
+   npm install
+   npm run build
+   cd ..
+   ```
+2. Build:
+   ```powershell
+   build_windows.bat
+   ```
+3. File kết quả:
+   - `dist\KoDauKoVui\KoDauKoVui.exe`
+4. Giữ `.env` cạnh file `.exe` nếu người dùng cần tự cấu hình API key.
+
+## Ma trận tương thích Windows
+
+| Tình huống | Kết quả mong đợi |
+| --- | --- |
+| KoDauKoVui user thường -> Notepad/Chrome/app thường | Hoạt động |
+| KoDauKoVui user thường -> app đích chạy as Administrator | Không đảm bảo; app sẽ báo lỗi rõ ràng |
+| Chạy bằng Python | Hỗ trợ |
+| Chạy bằng `.exe` one-folder | Hỗ trợ |
+
 ## Xây dựng lại Web UI (Dành cho Developer)
 Giao diện popup và hộp thoại hỏi đáp nằm trong thư mục `webui/`. Nếu bạn muốn tùy chỉnh giao diện React, hãy thực hiện các bước sau:
 ```bash
@@ -52,6 +104,10 @@ npm install
 npm run build
 ```
 Sau khi build, thư mục `webui/dist/` sẽ chứa các file HTML/JS/CSS tĩnh, Python (`webview_host.py`) sẽ tự động tải giao diện mới từ đây.
+
+## Ghi chú triển khai
+- Bản `.exe` one-folder dùng cùng logic runtime với bản Python, bao gồm popup/QA subprocess gọi lại chính executable bằng cờ `--webview`.
+- Dữ liệu ghi được như `.env`, `history.json`, `learned.json` được đặt cạnh executable; asset tĩnh vẫn đi theo bundle.
 
 ## Cấu hình Phím Tắt (Hotkeys) mặc định
 - Thêm dấu tiếng Việt : `<ctrl>+<f1>`
