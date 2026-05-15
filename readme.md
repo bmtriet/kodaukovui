@@ -9,15 +9,15 @@
 - **Ask before run**: từng action có thể bật thêm bước nhập yêu cầu bổ sung trước khi chạy.
 - **Return with source**: từng action có thể trả kết quả kèm nguyên văn source ở dưới.
 - **Auto-paste**: copy đoạn bôi đen, xử lý, rồi dán trả lại vào đúng chỗ cũ.
-- **Image QA built-in action**: bấm `i` trong popup để hỏi AI bằng ảnh clipboard hoặc ROI screenshot.
+- **Built-in AI actions**: `AI Prompt` và `Ask by Image` có thể chạy one-shot hoặc mở chat dialog để tiếp tục trao đổi trên cùng context.
 - **Settings UI**: cấu hình provider, popup hotkey, debug log và toàn bộ smart action không cần TUI terminal.
 
 ## Cấu trúc cấu hình mới
 - `.env`: chỉ giữ cấu hình chung và provider.
-- `smart_actions.json`: danh sách smart action runtime, được tạo tự động ở lần chạy đầu tiên.
+- `smart_actions.json`: danh sách smart action runtime do user CRUD, được tạo tự động ở lần chạy đầu tiên.
 - `smart_actions.example.json`: file mẫu đi kèm repo/bundle để tham khảo hoặc portable setup.
 - `brain.md`: context nền được prepend vào mọi smart action prompt nếu file này tồn tại.
-- built-in image action `i` là action runtime cố định, không nằm trong `smart_actions.json`
+- built-in action `AI Prompt` và `Ask by Image` là action runtime cố định, không nằm trong `smart_actions.json`
 
 ## Yêu cầu hệ thống
 - Python 3.10-3.13
@@ -55,19 +55,19 @@ Sau khi app chạy:
 - bấm gear để mở Settings UI
 
 ## Smart action mặc định
-Lần chạy đầu tiên app sẽ tạo `smart_actions.json` với 6 action seed:
+Lần chạy đầu tiên app sẽ tạo `smart_actions.json` với 5 action seed:
 - `1` -> `Thêm dấu tiếng Việt`
 - `e` -> `Translate to English`
 - `v` -> `Translate to Vietnamese`
 - `z` -> `Translate to Traditional Chinese`
 - `k` -> `Translate to Khmer`
-- `a` -> `AI Prompt` (`ask_before_run=true`)
 
 Ngoài ra popup luôn có thêm built-in action:
+- `a` -> `AI Prompt`
 - `i` -> `Ask by Image`
 
-Tất cả action này đều có thể sửa, xóa, đổi thứ tự hoặc thay hotkey trong Settings UI.
-Riêng `i` là built-in action, không sửa/xóa trong Settings UI ở phiên bản này.
+User-defined smart action có thể sửa, xóa, đổi thứ tự hoặc thay hotkey trong Settings UI.
+Hai built-in action không bị xóa, nhưng hotkey của chúng có thể đổi trong Settings UI.
 
 ## Packaging đa nền tảng
 - Build Windows phải chạy trên Windows:
@@ -99,7 +99,7 @@ Runtime writable files vẫn nằm cạnh executable/script:
 ## Ghi chú hành vi
 - Chỉ có **một** global hotkey: `HOTKEY_POPUP`
 - Hotkey của từng smart action là **popup-local**, không phải global hotkey riêng
-- Built-in image action `i` cũng là popup-local
+- Hotkey của built-in `AI Prompt` và `Ask by Image` cũng là popup-local
 - Mọi smart action đều chạy qua cùng một pipeline:
   - nạp `brain.md`
   - nạp prompt của action
@@ -114,8 +114,16 @@ Runtime writable files vẫn nằm cạnh executable/script:
   Source:
   <original text>
   ```
-- Với built-in image action `i`:
+- Với built-in `AI Prompt` và `Ask by Image`:
+  - ask dialog có selector cách phản hồi:
+    - `Paste back`: xử lý một chiều rồi paste về active input như cũ
+    - `Open chat`: mở chat dialog để tiếp tục thảo luận trên cùng context
+  - ask/chat input trong Linux webview dùng `Ctrl+Enter` để submit, còn `Enter` chỉ xuống dòng
+- Với built-in image action `Ask by Image`:
   - app ưu tiên lấy ảnh từ clipboard
-  - nếu clipboard không có ảnh thì mở ROI overlay để user drag một vùng màn hình
+  - nếu clipboard không có ảnh thì app chụp monitor hiện tại, mở fullscreen fake screen trên đúng monitor đó, rồi cho user drag ROI trực tiếp trên ảnh chụp
   - sau khi có ảnh, app luôn mở ask dialog để lấy câu hỏi
-  - AI trả về text và app sẽ paste kết quả lại vào cửa sổ đang dùng trước đó
+  - nếu chọn chat mode, mọi follow-up sẽ tiếp tục dùng đúng ảnh đã capture ở turn đầu
+- Với built-in `AI Prompt`:
+  - app dùng selected text làm context nền cho cả one-shot lẫn chat mode
+  - nếu chọn chat mode, follow-up sẽ tiếp tục bám theo đoạn selected text đã lấy ở turn đầu

@@ -10,6 +10,10 @@ from typing import Any
 from dotenv import dotenv_values, set_key
 
 
+AI_PROMPT_ID = "ai_prompt"
+IMAGE_ASK_ID = "image_ask"
+RETIRED_SMART_ACTION_IDS = {"ai-prompt", AI_PROMPT_ID}
+
 DEFAULT_SETTINGS = OrderedDict(
     [
         ("AI_PROVIDER", "gemini"),
@@ -28,16 +32,22 @@ BOOLEAN_FIELDS = {"DEBUG"}
 LANGUAGE_OPTIONS = {"en", "vi", "zh"}
 PROVIDER_OPTIONS = {"gemini", "openai"}
 
-BUILTIN_POPUP_ACTIONS = [
+BUILTIN_ACTION_DEFS = [
     {
-        "id": "image_ask",
+        "id": AI_PROMPT_ID,
+        "name": "AI Prompt",
+        "kind": AI_PROMPT_ID,
+        "hotkey": "a",
+        "env_key": "BUILTIN_KEY_AI_PROMPT",
+    },
+    {
+        "id": IMAGE_ASK_ID,
         "name": "Ask by Image",
+        "kind": IMAGE_ASK_ID,
         "hotkey": "i",
-        "kind": "image_ask",
-    }
+        "env_key": "BUILTIN_KEY_IMAGE_ASK",
+    },
 ]
-
-BUILTIN_POPUP_HOTKEYS = {action["hotkey"] for action in BUILTIN_POPUP_ACTIONS}
 
 DEFAULT_SMART_ACTIONS = [
     {
@@ -95,17 +105,6 @@ DEFAULT_SMART_ACTIONS = [
         "return_with_source": False,
         "ask_before_run": False,
     },
-    {
-        "id": "ai-prompt",
-        "name": "AI Prompt",
-        "prompt": (
-            "You are a helpful AI assistant. Apply the user's additional instruction to the provided text. "
-            "Return the final answer directly unless the user's instruction asks for a different output format."
-        ),
-        "hotkey": "a",
-        "return_with_source": False,
-        "ask_before_run": True,
-    },
 ]
 
 
@@ -151,6 +150,30 @@ def _normalize_action_key(value: Any, field_name: str = "hotkey") -> str:
     return normalized
 
 
+def _default_smart_actions() -> list[dict[str, Any]]:
+    return deepcopy(DEFAULT_SMART_ACTIONS)
+
+
+def _default_builtin_actions() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": item["id"],
+            "name": item["name"],
+            "kind": item["kind"],
+            "hotkey": item["hotkey"],
+        }
+        for item in BUILTIN_ACTION_DEFS
+    ]
+
+
+def _builtin_env_map() -> dict[str, str]:
+    return {item["id"]: item["env_key"] for item in BUILTIN_ACTION_DEFS}
+
+
+def _builtin_defs_map() -> dict[str, dict[str, Any]]:
+    return {item["id"]: item for item in BUILTIN_ACTION_DEFS}
+
+
 def load_settings(env_path: str | Path) -> dict[str, Any]:
     env_values = dotenv_values(env_path)
     settings: dict[str, Any] = {}
@@ -176,6 +199,20 @@ def load_settings(env_path: str | Path) -> dict[str, Any]:
     return settings
 
 
+def load_builtin_actions(env_path: str | Path) -> list[dict[str, Any]]:
+    env_values = dotenv_values(env_path)
+    defaults = _default_builtin_actions()
+    env_map = _builtin_env_map()
+    for action in defaults:
+        raw = env_values.get(env_map[action["id"]])
+        if raw is not None:
+            try:
+                action["hotkey"] = _normalize_action_key(raw, field_name=env_map[action["id"]])
+            except ValueError:
+                pass
+    return validate_builtin_actions_payload(defaults)
+
+
 def validate_settings_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     normalized["AI_PROVIDER"] = _normalize_provider(payload.get("AI_PROVIDER"))
@@ -188,6 +225,42 @@ def validate_settings_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized["UI_LANGUAGE"] = _normalize_language(payload.get("UI_LANGUAGE"))
     normalized["DEBUG"] = _coerce_bool(payload.get("DEBUG"))
     return normalized
+
+
+def validate_builtin_actions_payload(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        raise ValueError("Built-in actions payload must be a list.")
+
+    defs_map = _builtin_defs_map()
+    normalized: list[dict[str, Any]] = []
+
+    for item in payload:
+        action_id = _normalize_string(item.get("id"))
+        if action_id not in defs_map:
+            raise ValueError(f"Unknown built-in action id: {action_id}")
+        action_def = defs_map[action_id]
+        normalized.append(
+            {
+                "id": action_id,
+                "name": action_def["name"],
+                "kind": action_def["kind"],
+                "hotkey": _normalize_action_key(item.get("hotkey")),
+            }
+        )
+
+    expected_ids = {item["id"] for item in BUILTIN_ACTION_DEFS}
+    actual_ids = {item["id"] for item in normalized}
+    if actual_ids != expected_ids:
+        missing = ", ".join(sorted(expected_ids - actual_ids))
+        extra = ", ".join(sorted(actual_ids - expected_ids))
+        detail = missing or extra or "invalid set"
+        raise ValueError(f"Built-in actions payload is incomplete: {detail}")
+
+    hotkeys = [item["hotkey"] for item in normalized]
+    if len(set(hotkeys)) != len(hotkeys):
+        raise ValueError("Built-in action hotkeys must be unique.")
+
+    return sorted(normalized, key=lambda item: [a["id"] for a in BUILTIN_ACTION_DEFS].index(item["id"]))
 
 
 def save_settings(env_path: str | Path, settings: dict[str, Any]) -> None:
@@ -205,8 +278,17 @@ def save_settings(env_path: str | Path, settings: dict[str, Any]) -> None:
         set_key(str(env_path), key, value)
 
 
-def _default_smart_actions() -> list[dict[str, Any]]:
-    return deepcopy(DEFAULT_SMART_ACTIONS)
+def save_builtin_actions(env_path: str | Path, actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    env_path = Path(env_path)
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    if not env_path.exists():
+        env_path.touch()
+
+    normalized_actions = validate_builtin_actions_payload(actions)
+    env_map = _builtin_env_map()
+    for action in normalized_actions:
+        set_key(str(env_path), env_map[action["id"]], action["hotkey"])
+    return normalized_actions
 
 
 def validate_smart_action_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -231,17 +313,24 @@ def validate_smart_action_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def validate_smart_actions_payload(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def validate_smart_actions_payload(
+    payload: list[dict[str, Any]],
+    builtin_actions: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise ValueError("Smart actions payload must be a list.")
 
+    reserved_hotkeys = {
+        action["hotkey"] for action in (builtin_actions if builtin_actions is not None else _default_builtin_actions())
+    }
     normalized_actions = [validate_smart_action_payload(item) for item in payload]
+    normalized_actions = [item for item in normalized_actions if item["id"] not in RETIRED_SMART_ACTION_IDS]
 
     hotkeys = [item["hotkey"] for item in normalized_actions]
     if len(set(hotkeys)) != len(hotkeys):
         raise ValueError("Smart action hotkeys must be unique.")
-    if BUILTIN_POPUP_HOTKEYS.intersection(hotkeys):
-        reserved = ", ".join(sorted(BUILTIN_POPUP_HOTKEYS.intersection(hotkeys)))
+    if reserved_hotkeys.intersection(hotkeys):
+        reserved = ", ".join(sorted(reserved_hotkeys.intersection(hotkeys)))
         raise ValueError(f"Smart action hotkeys cannot use reserved built-in keys: {reserved}.")
 
     ids = [item["id"] for item in normalized_actions]
@@ -251,28 +340,38 @@ def validate_smart_actions_payload(payload: list[dict[str, Any]]) -> list[dict[s
     return normalized_actions
 
 
-def load_smart_actions(actions_path: str | Path) -> list[dict[str, Any]]:
+def load_smart_actions(
+    actions_path: str | Path,
+    builtin_actions: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     actions_path = Path(actions_path)
     actions_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not actions_path.exists():
         actions = _default_smart_actions()
-        save_smart_actions(actions_path, actions)
+        save_smart_actions(actions_path, actions, builtin_actions=builtin_actions)
         return actions
 
     try:
         data = json.loads(actions_path.read_text(encoding="utf-8"))
-        return validate_smart_actions_payload(data)
+        normalized = validate_smart_actions_payload(data, builtin_actions=builtin_actions)
+        if normalized != data:
+            save_smart_actions(actions_path, normalized, builtin_actions=builtin_actions)
+        return normalized
     except Exception:
         actions = _default_smart_actions()
-        save_smart_actions(actions_path, actions)
+        save_smart_actions(actions_path, actions, builtin_actions=builtin_actions)
         return actions
 
 
-def save_smart_actions(actions_path: str | Path, actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def save_smart_actions(
+    actions_path: str | Path,
+    actions: list[dict[str, Any]],
+    builtin_actions: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     actions_path = Path(actions_path)
     actions_path.parent.mkdir(parents=True, exist_ok=True)
-    normalized_actions = validate_smart_actions_payload(actions)
+    normalized_actions = validate_smart_actions_payload(actions, builtin_actions=builtin_actions)
     actions_path.write_text(
         json.dumps(normalized_actions, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -281,8 +380,9 @@ def save_smart_actions(actions_path: str | Path, actions: list[dict[str, Any]]) 
 
 
 def load_settings_snapshot(env_path: str | Path, actions_path: str | Path) -> dict[str, Any]:
+    builtin_actions = load_builtin_actions(env_path)
     return {
         "settings": load_settings(env_path),
-        "smart_actions": load_smart_actions(actions_path),
-        "builtin_actions": deepcopy(BUILTIN_POPUP_ACTIONS),
+        "smart_actions": load_smart_actions(actions_path, builtin_actions=builtin_actions),
+        "builtin_actions": builtin_actions,
     }

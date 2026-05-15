@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Send,
   Settings,
   Sparkles,
   Trash2,
@@ -23,24 +24,30 @@ declare global {
   interface Window {
     pywebview?: {
       api: {
-        submitAsk: (prompt: string) => void
+        submitAsk: (prompt: string, responseMode?: string) => void
         cancelAsk: () => void
         submitPopup: (actionId: string) => void
         cancelPopup: () => void
         openSettings: () => void
         setUiLanguage: (lang: string) => void
         getSettingsSnapshot: () => Promise<SettingsSnapshot>
-        saveSettingsSnapshot: (payload: string) => Promise<{ ok: boolean; error?: string; smart_actions?: SmartAction[] }>
+        saveSettingsSnapshot: (payload: string) => Promise<SaveSnapshotResponse>
         closeSettings: (saved: boolean) => void
+        getChatState: () => Promise<ChatApiResponse>
+        bootstrapChat: () => Promise<ChatApiResponse>
+        sendChatMessage: (prompt: string) => Promise<ChatApiResponse>
+        insertLatestReply: () => Promise<{ ok: boolean; error?: string }>
+        closeChat: () => void
       }
     }
   }
 }
 
 type PywebviewApi = NonNullable<NonNullable<typeof window.pywebview>["api"]>
-
-type PageKind = "ask" | "popup" | "settings"
+type PageKind = "ask" | "popup" | "settings" | "chat"
 type UiLanguage = "en" | "vi" | "zh"
+type ResponseMode = "paste" | "chat"
+type BuiltinKind = "ai_prompt" | "image_ask"
 
 type GeneralSettings = {
   AI_PROVIDER: "gemini" | "openai"
@@ -67,18 +74,53 @@ type BuiltinAction = {
   id: string
   name: string
   hotkey: string
-  kind: "image_ask"
+  kind: BuiltinKind
 }
 
 type SettingsSnapshot = {
   settings: GeneralSettings
   smart_actions: SmartAction[]
+  builtin_actions: BuiltinAction[]
+}
+
+type SaveSnapshotResponse = {
+  ok: boolean
+  error?: string
+  smart_actions?: SmartAction[]
   builtin_actions?: BuiltinAction[]
 }
 
 type AskPayload = {
   title?: string
   placeholder?: string
+  responseModeEnabled?: boolean
+  defaultResponseMode?: ResponseMode
+}
+
+type ChatMessage = {
+  role: "user" | "assistant"
+  content: string
+}
+
+type ChatSession = {
+  kind: BuiltinKind
+  title: string
+  messages: ChatMessage[]
+  latest_reply: string
+  context_hint?: string
+  selected_text?: string
+  image_payload?: {
+    source?: string
+    mime_type?: string
+    size?: { width: number; height: number }
+    region?: { left: number; top: number; right: number; bottom: number }
+  }
+}
+
+type ChatApiResponse = {
+  ok: boolean
+  error?: string
+  session?: ChatSession
 }
 
 const defaultSettings: GeneralSettings = {
@@ -96,18 +138,20 @@ const defaultSettings: GeneralSettings = {
 const translations = {
   en: {
     askTitle: "Extra Instruction",
-    askPlaceholder: "Enter additional instruction for this action...",
+    askPlaceholder: "Enter your request...",
     popupTitle: "Smart Actions",
     popupSubtitle: "Press a configured key or click an action",
     popupFooter: "Popup-local hotkeys only work while this popup is open.",
     imageActionHint: "Ask about clipboard image or draw an ROI capture.",
+    aiPromptHint: "Ask AI about the currently selected text.",
     settingsTitle: "Settings",
-    settingsSubtitle: "General settings and smart actions",
+    settingsSubtitle: "General settings, built-ins, and smart actions",
     close: "Close",
     saveAll: "Save All",
     general: "General",
     provider: "Provider",
     smartActions: "Smart Actions",
+    builtins: "Built-in Actions",
     popupHotkey: "Global Popup Hotkey",
     uiLanguage: "UI Language",
     debug: "Debug logging",
@@ -131,29 +175,47 @@ const translations = {
     actionDialogEdit: "Edit Smart Action",
     cancel: "Cancel",
     save: "Save",
-    actionsHint: "Each action has its own prompt, popup hotkey, and source-return option.",
-    duplicateKeys: "Smart action hotkeys must be unique.",
+    submit: "Submit",
+    send: "Send",
+    insertLatestReply: "Insert Latest Reply",
+    responseMode: "Response Mode",
+    responsePaste: "Paste back",
+    responseChat: "Open chat",
+    enterNewLineHint: "Enter inserts a new line. Ctrl+Enter submits.",
+    actionsHint: "Each user action has its own prompt, popup hotkey, and source-return option.",
+    builtinHint: "Built-in actions always stay available, but their popup hotkeys can be changed here.",
+    duplicateKeys: "All popup hotkeys must be unique.",
     reservedKeys: "Some smart action hotkeys are reserved for built-in actions.",
-    singleKey: "Each smart action hotkey must be exactly one character.",
+    singleKey: "Each action hotkey must be exactly one character.",
     requiredName: "Action name is required.",
     requiredPrompt: "Action prompt is required.",
     savedHint: "Changes are applied immediately after saving.",
     loadError: "Failed to load settings snapshot.",
+    chatTitle: "AI Chat",
+    chatLoading: "Preparing the first reply...",
+    chatEmpty: "The chat thread is empty.",
+    chatPlaceholder: "Type your next message...",
+    chatInsertSuccess: "Latest reply inserted into the active app.",
+    chatContextText: "Selected text context",
+    chatContextImage: "Image context",
+    chatErrorFallback: "Failed to send the message.",
   },
   vi: {
     askTitle: "Yêu cầu bổ sung",
-    askPlaceholder: "Nhập yêu cầu bổ sung cho action này...",
+    askPlaceholder: "Nhập yêu cầu của bạn...",
     popupTitle: "Smart Action",
     popupSubtitle: "Bấm key đã cấu hình hoặc click vào action",
     popupFooter: "Popup-local hotkey chỉ có hiệu lực khi popup đang mở.",
     imageActionHint: "Hỏi về ảnh trong clipboard hoặc quét ROI màn hình.",
+    aiPromptHint: "Hỏi AI về đoạn văn bản đang được chọn.",
     settingsTitle: "Cài đặt",
-    settingsSubtitle: "Cấu hình chung và smart action",
+    settingsSubtitle: "Cấu hình chung, built-in và smart action",
     close: "Đóng",
     saveAll: "Lưu tất cả",
     general: "Chung",
     provider: "Provider",
     smartActions: "Smart Action",
+    builtins: "Built-in Action",
     popupHotkey: "Phím mở popup toàn cục",
     uiLanguage: "Ngôn ngữ UI",
     debug: "Bật debug log",
@@ -177,29 +239,47 @@ const translations = {
     actionDialogEdit: "Sửa smart action",
     cancel: "Hủy",
     save: "Lưu",
-    actionsHint: "Mỗi action có prompt, hotkey trong popup và tùy chọn trả kèm source riêng.",
-    duplicateKeys: "Hotkey của smart action không được trùng nhau.",
+    submit: "Gửi",
+    send: "Gửi tiếp",
+    insertLatestReply: "Chèn reply mới nhất",
+    responseMode: "Cách phản hồi",
+    responsePaste: "Paste vào app",
+    responseChat: "Mở chat",
+    enterNewLineHint: "Enter xuống dòng. Ctrl+Enter để gửi.",
+    actionsHint: "Mỗi user action có prompt, hotkey trong popup và tùy chọn trả kèm source riêng.",
+    builtinHint: "Built-in action luôn có sẵn, nhưng user có thể đổi popup hotkey tại đây.",
+    duplicateKeys: "Toàn bộ popup hotkey không được trùng nhau.",
     reservedKeys: "Một số hotkey đã được giữ riêng cho built-in action.",
     singleKey: "Mỗi hotkey phải đúng một ký tự.",
     requiredName: "Tên action là bắt buộc.",
     requiredPrompt: "Prompt action là bắt buộc.",
     savedHint: "Lưu xong áp dụng ngay, không cần restart.",
     loadError: "Không tải được cấu hình hiện tại.",
+    chatTitle: "AI Chat",
+    chatLoading: "Đang tạo phản hồi đầu tiên...",
+    chatEmpty: "Thread chat hiện đang trống.",
+    chatPlaceholder: "Nhập tin nhắn tiếp theo...",
+    chatInsertSuccess: "Đã chèn phản hồi mới nhất vào app đang dùng.",
+    chatContextText: "Ngữ cảnh từ selected text",
+    chatContextImage: "Ngữ cảnh từ hình ảnh",
+    chatErrorFallback: "Không gửi được tin nhắn.",
   },
   zh: {
     askTitle: "附加要求",
-    askPlaceholder: "输入这个 action 的附加要求...",
+    askPlaceholder: "输入你的要求...",
     popupTitle: "Smart Actions",
     popupSubtitle: "按已配置按键，或点击 action",
     popupFooter: "这些 action 按键只在当前弹窗打开时生效。",
     imageActionHint: "询问剪贴板图片，或框选屏幕区域后提问。",
+    aiPromptHint: "围绕当前选中文本向 AI 提问。",
     settingsTitle: "设置",
-    settingsSubtitle: "通用设置与 smart action",
+    settingsSubtitle: "通用设置、内建动作与 smart action",
     close: "关闭",
     saveAll: "全部保存",
     general: "常规",
     provider: "模型提供方",
     smartActions: "Smart Actions",
+    builtins: "Built-in Actions",
     popupHotkey: "全局弹窗快捷键",
     uiLanguage: "界面语言",
     debug: "调试日志",
@@ -223,25 +303,41 @@ const translations = {
     actionDialogEdit: "编辑 smart action",
     cancel: "取消",
     save: "保存",
-    actionsHint: "每个 action 都有自己的 prompt、弹窗按键和返回原文选项。",
-    duplicateKeys: "Smart action 按键必须唯一。",
+    submit: "提交",
+    send: "发送",
+    insertLatestReply: "插入最新回复",
+    responseMode: "回复方式",
+    responsePaste: "回填到应用",
+    responseChat: "打开聊天",
+    enterNewLineHint: "Enter 换行，Ctrl+Enter 发送。",
+    actionsHint: "每个用户 action 都有自己的 prompt、弹窗按键和返回原文选项。",
+    builtinHint: "Built-in action 始终可用，但它们的弹窗按键可以在这里修改。",
+    duplicateKeys: "所有弹窗按键必须唯一。",
     reservedKeys: "有些按键已保留给内建 action。",
     singleKey: "每个按键必须是单个字符。",
     requiredName: "必须填写 action 名称。",
     requiredPrompt: "必须填写 action prompt。",
     savedHint: "保存后立即生效，无需重启。",
     loadError: "无法加载当前设置。",
+    chatTitle: "AI Chat",
+    chatLoading: "正在生成第一条回复...",
+    chatEmpty: "当前聊天线程为空。",
+    chatPlaceholder: "输入下一条消息...",
+    chatInsertSuccess: "已将最新回复插入到当前应用。",
+    chatContextText: "选中文本上下文",
+    chatContextImage: "图像上下文",
+    chatErrorFallback: "发送消息失败。",
   },
 }
 
-function parsePayload(): AskPayload {
+function parsePayload<T extends object>(): T {
   const params = new URLSearchParams(window.location.search)
   const raw = params.get("payload")
-  if (!raw) return {}
+  if (!raw) return {} as T
   try {
-    return JSON.parse(raw)
+    return JSON.parse(raw) as T
   } catch {
-    return {}
+    return {} as T
   }
 }
 
@@ -391,6 +487,33 @@ function LanguagePills({
   )
 }
 
+function BuiltinHotkeyEditor({
+  action,
+  onChange,
+}: {
+  action: BuiltinAction
+  onChange: (next: BuiltinAction) => void
+}) {
+  return (
+    <div className="grid gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 md:grid-cols-[1fr_120px]">
+      <div>
+        <div className="text-sm font-semibold text-slate-900">{action.name}</div>
+        <div className="text-xs text-slate-500">
+          {action.kind === "ai_prompt" ? "Reserved built-in AI text discussion flow." : "Reserved built-in image discussion flow."}
+        </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Hotkey</label>
+        <InputField
+          maxLength={1}
+          value={action.hotkey}
+          onChange={(e) => onChange({ ...action, hotkey: e.target.value.toLowerCase() })}
+        />
+      </div>
+    </div>
+  )
+}
+
 function AskUi({
   t,
   uiLang,
@@ -400,37 +523,43 @@ function AskUi({
   uiLang: UiLanguage
   changeLang: (newLang: UiLanguage) => void
 }) {
-  const payload = parsePayload()
+  const payload = parsePayload<AskPayload>()
   const [prompt, setPrompt] = useState("")
+  const [responseMode, setResponseMode] = useState<ResponseMode>(payload.defaultResponseMode || "paste")
+  const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     textareaRef.current?.focus()
   }, [])
 
+  const submit = () => {
+    window.pywebview?.api.submitAsk(prompt.trim(), responseMode)
+  }
+
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Escape") {
+    const native = e.nativeEvent as KeyboardEvent & { isComposing?: boolean }
+    const composing = isComposing || Boolean(native.isComposing)
+
+    if (e.key === "Escape" && !composing) {
       e.preventDefault()
       window.pywebview?.api.cancelAsk()
       return
     }
 
-    const isComposing =
-      Boolean((e.nativeEvent as KeyboardEvent & { isComposing?: boolean }).isComposing)
-
-    if (isComposing) {
+    if (composing) {
       return
     }
 
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && e.ctrlKey) {
       e.preventDefault()
-      window.pywebview?.api.submitAsk(prompt.trim())
+      submit()
     }
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/95 p-4 font-sans text-slate-900 shadow-2xl backdrop-blur-md">
-      <div className="pywebview-drag-region mb-3 flex cursor-move items-center justify-between px-1">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 p-4 font-sans text-slate-900">
+      <div className="mb-3 flex items-center justify-between px-1">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
             <Sparkles className="h-4 w-4 text-teal-600" />
@@ -441,31 +570,60 @@ function AskUi({
           <LanguagePills currentLang={uiLang} onChange={changeLang} />
           <button
             onClick={() => window.pywebview?.api.cancelAsk()}
-            className="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-200"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-200"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
+      {payload.responseModeEnabled ? (
+        <div className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.responseMode}</div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setResponseMode("paste")}
+              className={`rounded-lg px-3 py-2 text-sm ${responseMode === "paste" ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-700"}`}
+            >
+              {t.responsePaste}
+            </button>
+            <button
+              type="button"
+              onClick={() => setResponseMode("chat")}
+              className={`rounded-lg px-3 py-2 text-sm ${responseMode === "chat" ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-700"}`}
+            >
+              {t.responseChat}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="relative flex-grow">
         <Textarea
           ref={textareaRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
           onKeyDown={handleTextareaKeyDown}
           placeholder={payload.placeholder || t.askPlaceholder}
-          className="h-full min-h-36 w-full resize-none rounded-lg border-slate-200 bg-white p-3 text-sm shadow-inner focus-visible:border-teal-500 focus-visible:ring-teal-500"
+          className="h-full min-h-40 w-full resize-none rounded-lg border-slate-200 bg-white p-3 text-sm shadow-inner focus-visible:border-teal-500 focus-visible:ring-teal-500"
           spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
         />
       </div>
+
+      <div className="mt-2 text-xs text-slate-500">{t.enterNewLineHint}</div>
 
       <div className="mt-3 flex justify-end gap-2">
         <Button variant="outline" onClick={() => window.pywebview?.api.cancelAsk()} className="h-8 px-3 text-xs">
           {t.cancel}
         </Button>
-        <Button onClick={() => window.pywebview?.api.submitAsk(prompt.trim())} className="h-8 px-4 text-xs">
-          {t.save}
+        <Button onClick={submit} className="h-8 px-4 text-xs">
+          {t.submit}
         </Button>
       </div>
     </div>
@@ -530,52 +688,44 @@ function PopupUi({
       </div>
 
       <div className="flex-grow overflow-y-auto px-2 py-3">
-        {popupItems.map((action) => (
-          (() => {
-            const isImageAction = "kind" in action && action.kind === "image_ask"
-            if (isImageAction) {
-              return (
-                <button
-                  key={action.id}
-                  onClick={() => window.pywebview?.api.submitPopup(action.id)}
-                  className="mb-1 flex w-full items-center rounded-lg border border-transparent px-3 py-2.5 text-left transition-all hover:border-slate-200/50 hover:bg-white hover:shadow-sm"
-                >
-                  <div className="mr-3 flex h-7 w-7 items-center justify-center rounded bg-white text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">
-                    {action.hotkey.toUpperCase()}
-                  </div>
-                  <div className="mr-3 flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-                    <Image className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-grow">
-                    <div className="truncate text-sm font-medium text-slate-800">{action.name}</div>
-                    <div className="truncate text-xs text-slate-500">{t.imageActionHint}</div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-300" />
-                </button>
-              )
-            }
+        {popupItems.map((action) => {
+          const isBuiltin = "kind" in action
+          const hint =
+            isBuiltin && action.kind === "image_ask"
+              ? t.imageActionHint
+              : isBuiltin && action.kind === "ai_prompt"
+                ? t.aiPromptHint
+                : `${(action as SmartAction).ask_before_run ? t.askBeforeRun : "Run direct"}${
+                    (action as SmartAction).return_with_source ? " • With source" : ""
+                  }`
 
-            return (
-              <button
-                key={action.id}
-                onClick={() => window.pywebview?.api.submitPopup(action.id)}
-                className="mb-1 flex w-full items-center rounded-lg border border-transparent px-3 py-2.5 text-left transition-all hover:border-slate-200/50 hover:bg-white hover:shadow-sm"
-              >
-                <div className="mr-3 flex h-7 w-7 items-center justify-center rounded bg-white text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">
-                  {action.hotkey.toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-grow">
-                  <div className="truncate text-sm font-medium text-slate-800">{action.name}</div>
-                  <div className="truncate text-xs text-slate-500">
-                    {(action as SmartAction).ask_before_run ? "Ask before run" : "Run directly"}
-                    {(action as SmartAction).return_with_source ? " • With source" : ""}
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-slate-300" />
-              </button>
-            )
-          })()
-        ))}
+          const Icon = isBuiltin ? (action.kind === "image_ask" ? Image : Bot) : ChevronRight
+          const iconStyle = isBuiltin
+            ? action.kind === "image_ask"
+              ? "bg-amber-50 text-amber-600"
+              : "bg-sky-50 text-sky-600"
+            : "bg-transparent text-slate-300"
+
+          return (
+            <button
+              key={action.id}
+              onClick={() => window.pywebview?.api.submitPopup(action.id)}
+              className="mb-1 flex w-full items-center rounded-lg border border-transparent px-3 py-2.5 text-left transition-all hover:border-slate-200/50 hover:bg-white hover:shadow-sm"
+            >
+              <div className="mr-3 flex h-7 w-7 items-center justify-center rounded bg-white text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                {action.hotkey.toUpperCase()}
+              </div>
+              <div className={`mr-3 flex h-8 w-8 items-center justify-center rounded-full ${iconStyle}`}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-grow">
+                <div className="truncate text-sm font-medium text-slate-800">{action.name}</div>
+                <div className="truncate text-xs text-slate-500">{hint}</div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-300" />
+            </button>
+          )
+        })}
       </div>
 
       <div className="border-t border-slate-200/50 bg-slate-100/50 p-3 text-center">
@@ -700,6 +850,7 @@ function SettingsUi({
   builtinActions,
   onSettingsChange,
   onActionsChange,
+  onBuiltinActionsChange,
   onLanguageChange,
 }: {
   t: (typeof translations)["en"]
@@ -708,6 +859,7 @@ function SettingsUi({
   builtinActions: BuiltinAction[]
   onSettingsChange: React.Dispatch<React.SetStateAction<GeneralSettings>>
   onActionsChange: React.Dispatch<React.SetStateAction<SmartAction[]>>
+  onBuiltinActionsChange: React.Dispatch<React.SetStateAction<BuiltinAction[]>>
   onLanguageChange: (newLang: UiLanguage) => void
 }) {
   const [error, setError] = useState("")
@@ -718,14 +870,14 @@ function SettingsUi({
     onSettingsChange((prev) => ({ ...prev, [key]: value }))
   }
 
-  const normalizedKeys = useMemo(() => actions.map((action) => action.hotkey.trim().toLowerCase()), [actions])
-  const hasDuplicateKeys = normalizedKeys.length !== new Set(normalizedKeys).size
-  const hasInvalidKey = normalizedKeys.some((key) => key.length !== 1)
-  const builtinHotkeys = useMemo(
-    () => builtinActions.map((action) => action.hotkey.trim().toLowerCase()),
-    [builtinActions]
-  )
-  const usesReservedKey = normalizedKeys.some((key) => builtinHotkeys.includes(key))
+  const normalizedKeys = useMemo(() => {
+    const actionKeys = actions.map((action) => action.hotkey.trim().toLowerCase())
+    const builtinKeys = builtinActions.map((action) => action.hotkey.trim().toLowerCase())
+    return { actionKeys, builtinKeys, all: [...actionKeys, ...builtinKeys] }
+  }, [actions, builtinActions])
+
+  const hasDuplicateKeys = normalizedKeys.all.length !== new Set(normalizedKeys.all).size
+  const hasInvalidKey = normalizedKeys.all.some((key) => key.length !== 1)
   const hasBlankName = actions.some((action) => !action.name.trim())
   const hasBlankPrompt = actions.some((action) => !action.prompt.trim())
 
@@ -736,10 +888,6 @@ function SettingsUi({
     }
     if (hasInvalidKey) {
       setError(t.singleKey)
-      return
-    }
-    if (usesReservedKey) {
-      setError(t.reservedKeys)
       return
     }
     if (hasBlankName) {
@@ -760,6 +908,10 @@ function SettingsUi({
         HOTKEY_POPUP: settings.HOTKEY_POPUP.trim(),
         UI_LANGUAGE: settings.UI_LANGUAGE,
       },
+      builtin_actions: builtinActions.map((action) => ({
+        ...action,
+        hotkey: action.hotkey.trim().toLowerCase(),
+      })),
       smart_actions: actions.map((action) => ({
         ...action,
         name: action.name.trim(),
@@ -775,6 +927,7 @@ function SettingsUi({
       return
     }
 
+    onBuiltinActionsChange(response.builtin_actions || payload.builtin_actions)
     onActionsChange(response.smart_actions || payload.smart_actions)
     window.pywebview?.api.closeSettings(true)
   }
@@ -885,6 +1038,23 @@ function SettingsUi({
             </div>
           </SectionCard>
 
+          <SectionCard title={t.builtins} icon={<Bot className="h-4 w-4" />}>
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              {t.builtinHint}
+            </div>
+            <div className="space-y-2">
+              {builtinActions.map((action) => (
+                <BuiltinHotkeyEditor
+                  key={action.id}
+                  action={action}
+                  onChange={(next) =>
+                    onBuiltinActionsChange((prev) => prev.map((item) => (item.id === next.id ? next : item)))
+                  }
+                />
+              ))}
+            </div>
+          </SectionCard>
+
           <SectionCard title={t.smartActions} icon={<Keyboard className="h-4 w-4" />}>
             <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
               <p className="text-sm text-slate-600">{t.actionsHint}</p>
@@ -892,10 +1062,6 @@ function SettingsUi({
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 {t.addAction}
               </Button>
-            </div>
-
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Built-in: {builtinActions.map((action) => `${action.hotkey.toUpperCase()}=${action.name}`).join(", ")}
             </div>
 
             <div className="space-y-2">
@@ -964,6 +1130,195 @@ function SettingsUi({
   )
 }
 
+function ChatUi({
+  t,
+  uiLang,
+  changeLang,
+}: {
+  t: (typeof translations)["en"]
+  uiLang: UiLanguage
+  changeLang: (newLang: UiLanguage) => void
+}) {
+  const [session, setSession] = useState<ChatSession | null>(null)
+  const [draft, setDraft] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState("")
+  const [insertSuccess, setInsertSuccess] = useState("")
+  const [isComposing, setIsComposing] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    textareaRef.current?.focus()
+  }, [session])
+
+  useEffect(() => {
+    let mounted = true
+    const bootstrap = async () => {
+      const api = window.pywebview?.api
+      if (!api) return
+      const response = await api.bootstrapChat()
+      if (!mounted) return
+      if (!response?.ok) {
+        setError(response?.error || t.chatErrorFallback)
+      } else {
+        setSession(response.session || null)
+      }
+      setLoading(false)
+    }
+    bootstrap()
+    return () => {
+      mounted = false
+    }
+  }, [t.chatErrorFallback])
+
+  const send = async () => {
+    if (!draft.trim()) return
+    setSending(true)
+    setError("")
+    setInsertSuccess("")
+    const response = await window.pywebview?.api.sendChatMessage(draft.trim())
+    setSending(false)
+    if (!response?.ok) {
+      setError(response?.error || t.chatErrorFallback)
+      return
+    }
+    setSession(response.session || null)
+    setDraft("")
+    textareaRef.current?.focus()
+  }
+
+  const insertLatestReply = async () => {
+    setError("")
+    setInsertSuccess("")
+    const response = await window.pywebview?.api.insertLatestReply()
+    if (!response?.ok) {
+      setError(response?.error || t.chatErrorFallback)
+      return
+    }
+    setInsertSuccess(t.chatInsertSuccess)
+  }
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const native = e.nativeEvent as KeyboardEvent & { isComposing?: boolean }
+    const composing = isComposing || Boolean(native.isComposing)
+
+    if (e.key === "Escape" && !composing) {
+      e.preventDefault()
+      window.pywebview?.api.closeChat()
+      return
+    }
+
+    if (composing) return
+
+    if (e.key === "Enter" && e.ctrlKey) {
+      e.preventDefault()
+      void send()
+    }
+  }
+
+  return (
+    <div className="flex h-screen flex-col bg-slate-50 font-sans text-slate-900">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <Sparkles className="h-4 w-4 text-teal-600" />
+            {session?.title || t.chatTitle}
+          </h2>
+          <p className="text-xs text-slate-500">
+            {session?.context_hint ||
+              (session?.kind === "image_ask" ? t.chatContextImage : t.chatContextText)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <LanguagePills currentLang={uiLang} onChange={changeLang} />
+          <button
+            onClick={() => window.pywebview?.api.closeChat()}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {loading ? (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
+            {t.chatLoading}
+          </div>
+        ) : session?.messages?.length ? (
+          <div className="space-y-3">
+            {session.messages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                className={`max-w-[85%] rounded-lg px-4 py-3 text-sm shadow-sm ${
+                  message.role === "assistant"
+                    ? "border border-slate-200 bg-white text-slate-800"
+                    : "ml-auto bg-teal-600 text-white"
+                }`}
+              >
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide opacity-70">
+                  {message.role === "assistant" ? "AI" : "You"}
+                </div>
+                <div className="whitespace-pre-wrap break-words">{message.content}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
+            {t.chatEmpty}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-slate-200 bg-white px-4 py-4">
+        {error ? (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <AlertCircle className="h-4 w-4" />
+            {error}
+          </div>
+        ) : null}
+        {insertSuccess ? (
+          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {insertSuccess}
+          </div>
+        ) : null}
+
+        <Textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
+          onKeyDown={handleTextareaKeyDown}
+          placeholder={t.chatPlaceholder}
+          className="min-h-28 resize-none bg-white"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+        />
+        <div className="mt-2 text-xs text-slate-500">{t.enterNewLineHint}</div>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <Button variant="outline" onClick={insertLatestReply} disabled={!session?.latest_reply}>
+            {t.insertLatestReply}
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => window.pywebview?.api.closeChat()}>
+              {t.close}
+            </Button>
+            <Button onClick={() => void send()} disabled={sending || !draft.trim()}>
+              <Send className="mr-1.5 h-3.5 w-3.5" />
+              {t.send}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [page, setPage] = useState<PageKind>("ask")
   const [lang, setLang] = useState<UiLanguage>("en")
@@ -976,7 +1331,7 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const pageParam = params.get("page")
-    if (pageParam === "popup" || pageParam === "settings" || pageParam === "ask") {
+    if (pageParam === "popup" || pageParam === "settings" || pageParam === "ask" || pageParam === "chat") {
       setPage(pageParam)
     }
   }, [])
@@ -1042,9 +1397,14 @@ export default function App() {
         builtinActions={builtinActions}
         onSettingsChange={setSettings}
         onActionsChange={setActions}
+        onBuiltinActionsChange={setBuiltinActions}
         onLanguageChange={changeLang}
       />
     )
+  }
+
+  if (page === "chat") {
+    return <ChatUi t={t} uiLang={lang} changeLang={changeLang} />
   }
 
   return <AskUi t={t} uiLang={lang} changeLang={changeLang} />

@@ -21,6 +21,16 @@ exit /b 1
 :python_found
 echo Using Windows runtime interpreter: %PYTHON_LAUNCHER%
 
+echo Cleaning up stuck KoDauKoVui processes...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$repo = (Get-Location).Path; " ^
+  "$patterns = @('main.py','webview_host.py','roi_capture.py'); " ^
+  "$targets = Get-CimInstance Win32_Process | Where-Object { " ^
+  "  $proc = $_; " ^
+  "  $proc.Name -match '^python(w)?\.exe$' -and $proc.CommandLine -and $proc.CommandLine.Contains($repo) -and ($patterns | Where-Object { $proc.CommandLine.Contains($_) }).Count -gt 0 " ^
+  "}; " ^
+  "foreach ($proc in $targets) { try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop; Write-Host ('  killed PID ' + $proc.ProcessId) } catch {} }"
+
 if not exist "venv\Scripts\python.exe" (
   %PYTHON_LAUNCHER% -m venv venv
   if errorlevel 1 exit /b 1

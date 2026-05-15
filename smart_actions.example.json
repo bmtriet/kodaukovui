@@ -38,13 +38,5 @@
     "hotkey": "k",
     "return_with_source": false,
     "ask_before_run": false
-  },
-  {
-    "id": "ai-prompt",
-    "name": "AI Prompt",
-    "prompt": "You are a helpful AI assistant. Apply the user's additional instruction to the provided text. Return the final answer directly unless the user's instruction asks for a different output format.",
-    "hotkey": "a",
-    "return_with_source": false,
-    "ask_before_run": true
   }
 ]
