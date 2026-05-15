@@ -1,194 +1,258 @@
-import os
-import sys
 import json
-import time
-import threading
 import subprocess
-from dotenv import load_dotenv, set_key
-from pynput import keyboard
+import sys
+import threading
+import time
+from pathlib import Path
+
 from google import genai
 import openai
+from pynput import keyboard
+
 from app_paths import get_resource_path, get_user_data_path
 from platform_adapter import create_platform_adapter
+from settings_store import load_settings, load_smart_actions
 
-# Load environment variables
+
 BUNDLE_DIR = get_resource_path()
-env_file = str(get_user_data_path(".env"))
-load_dotenv(dotenv_path=env_file)
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-HOTKEY = os.getenv("HOTKEY", "<ctrl>+<shift>+1")
-HOTKEY_TRANS_EN = os.getenv("HOTKEY_TRANS_EN", "<ctrl>+<shift>+@")
-HOTKEY_TRANS_ZHTW = os.getenv("HOTKEY_TRANS_ZHTW", "<ctrl>+<shift>+#")
-HOTKEY_TRANS_KHMER = os.getenv("HOTKEY_TRANS_KHMER", "<ctrl>+<shift>+$")
-HOTKEY_TRANS_VI = os.getenv("HOTKEY_TRANS_VI", "<ctrl>+<f5>")
-HOTKEY_QA = os.getenv("HOTKEY_QA", "<ctrl>+<f12>")
-HOTKEY_POPUP = os.getenv("HOTKEY_POPUP", "<ctrl>+/")
-UI_LANGUAGE = os.getenv("UI_LANGUAGE", "en").lower()
-KEEP_ORIGINAL_TEXT = os.getenv("KEEP_ORIGINAL_TEXT", "false").lower() == "true"
-SHOW_QUESTION_IN_QA = os.getenv("SHOW_QUESTION_IN_QA", "false").lower() == "true"
-DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
-AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-
-HISTORY_FILE = str(get_user_data_path("history.json"))
-LEARNED_FILE = str(get_user_data_path("learned.json"))
+ENV_FILE = Path(get_user_data_path(".env"))
+SMART_ACTIONS_FILE = Path(get_user_data_path("smart_actions.json"))
+HISTORY_FILE = Path(get_user_data_path("history.json"))
+LEARNED_FILE = Path(get_user_data_path("learned.json"))
 HISTORY_LIMIT = 1000
+SOURCE_SEPARATOR = "\n\n---\nSource:\n"
 
 client = None
 openai_client = None
-
 controller = keyboard.Controller()
-PLATFORM = create_platform_adapter(controller=controller, debug=DEBUG)
-HOTKEY_POPUP = PLATFORM.normalize_hotkey(HOTKEY_POPUP)
+PLATFORM = create_platform_adapter(controller=controller, debug=False)
+
+AI_PROVIDER = "gemini"
+GEMINI_API_KEY = ""
+GEMINI_MODEL = "gemini-2.5-flash-lite"
+OPENAI_API_KEY = ""
+OPENAI_MODEL = "gpt-4o-mini"
+OPENAI_API_BASE = "https://api.openai.com/v1"
+HOTKEY_POPUP = "<ctrl>+'"
+UI_LANGUAGE = "en"
+DEBUG = False
+SMART_ACTIONS = []
+RUNTIME_SETTINGS = {}
+is_processing = False
+
 
 def load_history():
-    if not os.path.exists(HISTORY_FILE):
+    if not HISTORY_FILE.exists():
         return []
     try:
-        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+        with HISTORY_FILE.open("r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"Lỗi đọc file history: {e}")
         return []
 
+
 def load_learned():
-    if not os.path.exists(LEARNED_FILE):
+    if not LEARNED_FILE.exists():
         return {}
     try:
-        with open(LEARNED_FILE, 'r', encoding='utf-8') as f:
+        with LEARNED_FILE.open("r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"Lỗi đọc file learned: {e}")
         return {}
 
+
 def save_history(original, result, user_edit=False):
     history = load_history()
-    history.append({
-        "original": original,
-        "result": result,
-        "user_edit": user_edit
-    })
-    
+    history.append({"original": original, "result": result, "user_edit": user_edit})
+
     if len(history) > HISTORY_LIMIT:
         history = history[-HISTORY_LIMIT:]
-        
-    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+
+    with HISTORY_FILE.open("w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=4)
+
 
 def run_learning_mode():
     print("\n--- Đang chạy Learning Mode ---")
     history = load_history()
     learned = load_learned()
-    
+
     count = 0
     for item in history:
-        if item.get("user_edit") == True:
+        if item.get("user_edit") is True:
             orig = item.get("original", "").strip()
             res = item.get("result", "").strip()
-            if orig and res:
-                if orig not in learned or learned[orig] != res:
-                    learned[orig] = res
-                    count += 1
-                    
-    with open(LEARNED_FILE, 'w', encoding='utf-8') as f:
+            if orig and res and (orig not in learned or learned[orig] != res):
+                learned[orig] = res
+                count += 1
+
+    with LEARNED_FILE.open("w", encoding="utf-8") as f:
         json.dump(learned, f, ensure_ascii=False, indent=4)
-        
+
     print(f"Hoàn tất! Đã cập nhật {count} mẫu mới từ người dùng vào {LEARNED_FILE}.\n")
+
 
 def load_brain_context():
     brain_path = get_user_data_path("brain.md")
     if not brain_path.exists():
         brain_path = get_resource_path("brain.md")
     if brain_path.exists():
-        with open(brain_path, 'r', encoding='utf-8') as f:
+        with open(brain_path, "r", encoding="utf-8") as f:
             content = f.read().strip()
-            # Bỏ qua phần hướng dẫn mặc định của hệ thống
-            if "[Nhập thông tin ngữ cảnh của bạn vào bên dưới dòng này]" in content:
-                content = content.split("[Nhập thông tin ngữ cảnh của bạn vào bên dưới dòng này]")[-1].strip()
+            marker = "[Nhập thông tin ngữ cảnh của bạn vào bên dưới dòng này]"
+            if marker in content:
+                content = content.split(marker)[-1].strip()
             if content:
-                return f"\n[AI BRAIN CONTEXT]\n{content}\n[END CONTEXT]\n\n"
-    return ""
-
-def build_prompt(text, action_type="add_marks", custom_prompt="", custom_lang="Auto", custom_length="medium"):
-    brain_ctx = load_brain_context()
-    
-    if action_type == "add_marks":
-        learned = load_learned()
-        prompt = f"{brain_ctx}Bạn là một chuyên gia ngôn ngữ tiếng Việt. Hãy thêm dấu chuẩn xác nhất cho đoạn văn bản không dấu hoặc sai dấu sau. CHỈ trả về văn bản đã được thêm dấu, KHÔNG giải thích, KHÔNG thêm bất kỳ bình luận nào khác.\n"
-        if learned:
-            prompt += "\nDưới đây là một số ví dụ do người dùng đã sửa lỗi từ những lần trước (bạn hãy học theo phong cách này hoặc tránh sai lầm tương tự):\n"
-            examples = list(learned.items())[-10:]
-            for orig, res in examples:
-                prompt += f"Văn bản gốc: {orig}\nVăn bản chuẩn: {res}\n\n"
-        prompt += f"Văn bản cần xử lý:\n{text}"
-        return prompt
-    elif action_type == "trans_en":
-        return f"{brain_ctx}Hãy dịch đoạn văn bản sau sang tiếng Anh một cách tự nhiên nhất. CHỈ trả về văn bản đã dịch, KHÔNG giải thích, KHÔNG bình luận.\n\nVăn bản gốc:\n{text}"
-    elif action_type == "trans_zhtw":
-        return f"{brain_ctx}Hãy dịch đoạn văn bản sau sang tiếng Hoa phồn thể (Traditional Chinese) một cách tự nhiên nhất. CHỈ trả về văn bản đã dịch, KHÔNG giải thích, KHÔNG bình luận.\n\nVăn bản gốc:\n{text}"
-    elif action_type == "trans_khmer":
-        return f"{brain_ctx}Hãy dịch đoạn văn bản sau sang tiếng Khmer một cách tự nhiên nhất. CHỈ trả về văn bản đã dịch, KHÔNG giải thích, KHÔNG bình luận.\n\nVăn bản gốc:\n{text}"
-    elif action_type == "trans_vi":
-        return f"{brain_ctx}Hãy dịch đoạn văn bản sau sang tiếng Việt một cách tự nhiên nhất. CHỈ trả về văn bản đã dịch, KHÔNG giải thích, KHÔNG bình luận.\n\nVăn bản gốc:\n{text}"
-    elif action_type == "qa":
-        base = f"{brain_ctx}Bạn là một trợ lý AI thông minh."
-        if custom_length == "short":
-            base += " Hãy trả lời một cách thật ngắn gọn, súc tích và trực tiếp vào vấn đề."
-        elif custom_length == "detailed":
-            base += " Hãy trả lời một cách thật chi tiết, cặn kẽ và giải thích rõ ràng."
-        
-        if custom_lang != "Auto":
-            base += f"\nLUÔN LUÔN trả lời bằng ngôn ngữ: {custom_lang}."
-        if custom_prompt:
-            base += f"\n\nYêu cầu của người dùng:\n{custom_prompt}"
-        base += f"\n\nNội dung/Câu hỏi:\n{text}"
-        return base
+                return f"[AI BRAIN CONTEXT]\n{content}\n[END CONTEXT]"
     return ""
 
 
-def build_webview_command(page: str, ui_lang: str):
+def build_prompt(selected_text: str, action: dict, extra_instruction: str = "") -> str:
+    sections = []
+    brain_ctx = load_brain_context().strip()
+    if brain_ctx:
+        sections.append(brain_ctx)
+
+    sections.append(action["prompt"].strip())
+
+    if extra_instruction.strip():
+        sections.append(f"[ADDITIONAL USER INSTRUCTION]\n{extra_instruction.strip()}\n[END ADDITIONAL USER INSTRUCTION]")
+
+    sections.append(
+        "Hãy làm theo đúng hướng dẫn ở trên. Nếu không có yêu cầu khác trong prompt, chỉ trả về kết quả cuối cùng."
+    )
+    sections.append(f"[SELECTED TEXT]\n{selected_text}\n[END SELECTED TEXT]")
+    return "\n\n".join(section for section in sections if section)
+
+
+def build_webview_command(page: str, ui_lang: str, payload: dict | None = None):
+    command = [sys.executable, "--webview", page, ui_lang]
+    if payload is not None:
+        command.append(json.dumps(payload, ensure_ascii=False))
     if getattr(sys, "frozen", False):
-        return [sys.executable, "--webview", page, ui_lang]
-    return [sys.executable, str(BUNDLE_DIR / "webview_host.py"), page, ui_lang]
+        return command
+    return [sys.executable, str(BUNDLE_DIR / "webview_host.py"), page, ui_lang] + command[4:]
 
 
-def initialize_ai_clients(require_api_key: bool = True) -> bool:
+def apply_runtime_settings(settings: dict, smart_actions: list[dict]):
+    global RUNTIME_SETTINGS, AI_PROVIDER, GEMINI_API_KEY, GEMINI_MODEL, OPENAI_API_KEY
+    global OPENAI_MODEL, OPENAI_API_BASE, HOTKEY_POPUP, UI_LANGUAGE, DEBUG, SMART_ACTIONS
+
+    RUNTIME_SETTINGS = settings
+    AI_PROVIDER = settings["AI_PROVIDER"]
+    GEMINI_API_KEY = settings["GEMINI_API_KEY"]
+    GEMINI_MODEL = settings["GEMINI_MODEL"]
+    OPENAI_API_KEY = settings["OPENAI_API_KEY"]
+    OPENAI_MODEL = settings["OPENAI_MODEL"]
+    OPENAI_API_BASE = settings["OPENAI_API_BASE"]
+    HOTKEY_POPUP = PLATFORM.normalize_hotkey(settings["HOTKEY_POPUP"])
+    UI_LANGUAGE = settings["UI_LANGUAGE"]
+    DEBUG = settings["DEBUG"]
+    PLATFORM.debug = DEBUG
+    SMART_ACTIONS = smart_actions
+
+
+def initialize_ai_clients(require_api_key: bool = False) -> bool:
     global client, openai_client
 
     client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_token_here" else None
-    openai_client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE) if OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here" else None
+    openai_client = (
+        openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+        if OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here"
+        else None
+    )
 
     if client or openai_client:
         return True
 
     if require_api_key:
-        print("Vui lòng cấu hình ít nhất một API Key (Gemini hoặc OpenAI) trong file .env")
-
+        print("[WARN] Chưa cấu hình API Key. Mở popup rồi bấm gear để vào Settings.")
     return False
 
-is_processing = False
 
-def on_activate(action_type="add_marks", pre_selected_text=None, target_window_id=None):
+def reload_runtime_settings(rebuild_listener: bool = False) -> None:
+    settings = load_settings(ENV_FILE)
+    smart_actions = load_smart_actions(SMART_ACTIONS_FILE)
+    apply_runtime_settings(settings, smart_actions)
+    initialize_ai_clients(require_api_key=False)
+    if rebuild_listener:
+        HOTKEY_MANAGER.rebuild()
+
+
+def run_webview_page(page: str, ui_lang: str, payload: dict | None = None):
+    result = subprocess.run(
+        build_webview_command(page, ui_lang, payload),
+        capture_output=True,
+        text=True,
+    )
+    if result.stderr.strip():
+        print(f"[WEBVIEW {page.upper()}] {result.stderr.strip()}")
+
+    output = result.stdout.strip()
+    if result.returncode != 0 or not output:
+        return None
+
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        return output
+
+
+def find_action_by_id(action_id: str):
+    for action in SMART_ACTIONS:
+        if action["id"] == action_id:
+            return action
+    return None
+
+
+def show_ask_window(action: dict):
+    data = run_webview_page(
+        "ask",
+        UI_LANGUAGE,
+        {
+            "title": action["name"],
+            "placeholder": "Nhập yêu cầu bổ sung cho action này...",
+        },
+    )
+    if isinstance(data, dict):
+        return str(data.get("prompt", "") or "").strip()
+    return None
+
+
+def call_ai(prompt: str) -> str:
+    if AI_PROVIDER == "openai" and openai_client:
+        response = openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content.strip()
+
+    if client:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
+        return response.text.strip()
+
+    raise RuntimeError("Chưa cấu hình AI provider/API key. Mở popup rồi bấm gear để vào Settings.")
+
+
+def on_activate(action_id, pre_selected_text=None, target_window_id=None):
     global is_processing
     if is_processing:
         return
     is_processing = True
 
-    action_names = {
-        "add_marks": "Thêm dấu tiếng Việt",
-        "trans_en": "Dịch sang Tiếng Anh",
-        "trans_zhtw": "Dịch sang Tiếng Hoa Phồn thể",
-        "trans_khmer": "Dịch sang Tiếng Khmer",
-        "trans_vi": "Dịch sang Tiếng Việt",
-        "qa": "Hỏi đáp AI"
-    }
-    
-    print(f"\n[HOTKEY] Đã nhận diện phím tắt! Đang tiến hành xử lý: {action_names.get(action_type, '...')}...")
     try:
+        action = find_action_by_id(action_id)
+        if not action:
+            print(f"[LỖI] Không tìm thấy smart action: {action_id}")
+            return
+
+        print(f"\n[HOTKEY] Đang xử lý smart action: {action['name']}...")
+
         if pre_selected_text is not None:
             selected_text = pre_selected_text
         else:
@@ -199,141 +263,77 @@ def on_activate(action_type="add_marks", pre_selected_text=None, target_window_i
             if not selected_text:
                 print("[LỖI] Không có văn bản nào để xử lý (chưa bôi đen và clipboard cũng trống).")
                 return
-            
+
         if DEBUG:
             print(f"[DEBUG] Văn bản gốc: {selected_text}")
-            
-        if action_type == "add_marks":
-            placeholder_error = PLATFORM.prepare_add_marks_placeholder(target_window_id=target_window_id)
-            if placeholder_error:
-                print(placeholder_error)
-                return
-        
-        result_text = None
-        
-        # Chỉ check cache cho Thêm dấu
-        if action_type == "add_marks":
-            selected_text_stripped = selected_text.strip()
-            learned = load_learned()
-            if selected_text_stripped in learned:
-                result_text = learned[selected_text_stripped]
-            else:
-                history = load_history()
-                for item in reversed(history):
-                    if item.get("original", "").strip() == selected_text_stripped:
-                        result_text = item.get("result")
-                        break
-                        
-            if result_text and DEBUG:
-                print(f"[DEBUG] [CACHE HIT] Lấy từ bộ nhớ: {result_text}")
 
-        if not result_text:
-            custom_prompt = ""
-            custom_lang = "Auto"
-            custom_length = "medium"
-            custom_append = False
-            
-            if action_type == "qa":
-                try:
-                    res = subprocess.run(build_webview_command("qa", UI_LANGUAGE), capture_output=True, text=True)
-                    if res.returncode == 0 and res.stdout.strip():
-                        import json
-                        data = json.loads(res.stdout.strip())
-                        custom_prompt = data.get("prompt", "")
-                        custom_lang = data.get("lang", "Auto")
-                        custom_length = data.get("length", "medium")
-                        custom_append = data.get("append_question", False)
-                    else:
-                        print("[HỦY] Người dùng đã hủy Hỏi đáp AI.")
-                        is_processing = False
-                        return
-                except Exception as e:
-                    print(f"Lỗi hiển thị cửa sổ QA: {e}")
-                    is_processing = False
-                    return
-
-            try:
-                prompt = build_prompt(selected_text, action_type, custom_prompt, custom_lang, custom_length)
-                
-                if AI_PROVIDER == "openai" and openai_client:
-                    response = openai_client.chat.completions.create(
-                        model=OPENAI_MODEL,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    result_text = response.choices[0].message.content.strip()
-                elif client:
-                    response = client.models.generate_content(
-                        model=GEMINI_MODEL,
-                        contents=prompt
-                    )
-                    result_text = response.text.strip()
-                else:
-                    print("[LỖI] Client API chưa được cấu hình đúng.")
-                    return
-                
-                if DEBUG:
-                    print(f"[DEBUG] Văn bản kết quả (từ API): {result_text}")
-                
-                # Chỉ lưu history cho thêm dấu để đỡ loãng data
-                if action_type == "add_marks":
-                    save_history(selected_text, result_text, user_edit=False)
-                
-            except Exception as e:
-                print(f"[LỖI] Lỗi khi gọi API Gemini hoặc xử lý: {e}")
+        extra_instruction = ""
+        if action.get("ask_before_run"):
+            extra_instruction = show_ask_window(action)
+            if extra_instruction is None:
+                print(f"[HỦY] Đã hủy smart action: {action['name']}.")
                 return
-                
-        # Giữ lại bản gốc
-        if action_type == "qa":
-            if SHOW_QUESTION_IN_QA or custom_append:
-                question_text = custom_prompt if custom_prompt else selected_text
-                result_text = f"Hỏi:\n{question_text}\n\nĐáp:\n{result_text}"
-        elif KEEP_ORIGINAL_TEXT and action_type != "add_marks":
-                result_text = f"{selected_text}\n---\n{result_text}"
-            
+
+        prompt = build_prompt(selected_text, action, extra_instruction)
+        result_text = call_ai(prompt)
+
+        if DEBUG:
+            print(f"[DEBUG] Văn bản kết quả: {result_text}")
+
+        if action.get("return_with_source"):
+            result_text = f"{result_text}{SOURCE_SEPARATOR}{selected_text}"
+
         if target_window_id:
             PLATFORM.restore_focus(target_window_id)
 
-        paste_error = PLATFORM.paste_processed_text(result_text, action_type=action_type, target_window_id=target_window_id)
+        paste_error = PLATFORM.paste_processed_text(
+            result_text,
+            action_type="smart_action",
+            target_window_id=target_window_id,
+        )
         if paste_error:
             print(paste_error)
             return
-        
-        print(f"[THÀNH CÔNG] Đã hoàn tất {action_names.get(action_type)}!")
+
+        save_history(selected_text, result_text, user_edit=False)
+        print(f"[THÀNH CÔNG] Đã hoàn tất {action['name']}!")
     except Exception as ex:
         print(f"\n[LỖI NGHIÊM TRỌNG] Đã xảy ra lỗi trong quá trình xử lý hotkey: {ex}")
     finally:
         is_processing = False
 
-def on_press(key):
-    if DEBUG:
-        print(f"[DEBUG] Bấm phím: {key}")
 
-def activate_add_marks(): on_activate("add_marks", target_window_id=PLATFORM.get_current_active_window())
-def activate_trans_en(): on_activate("trans_en", target_window_id=PLATFORM.get_current_active_window())
-def activate_trans_zhtw(): on_activate("trans_zhtw", target_window_id=PLATFORM.get_current_active_window())
-def activate_trans_khmer(): on_activate("trans_khmer", target_window_id=PLATFORM.get_current_active_window())
-def activate_trans_vi(): on_activate("trans_vi", target_window_id=PLATFORM.get_current_active_window())
-def activate_qa(): on_activate("qa", target_window_id=PLATFORM.get_current_active_window())
+def show_settings_window() -> bool:
+    result = run_webview_page("settings", UI_LANGUAGE)
+    return isinstance(result, dict) and result.get("type") == "settings_saved"
+
 
 def show_popup_menu():
     global is_processing
-    if is_processing: return
+    if is_processing:
+        return
     is_processing = True
 
     target_window_id = PLATFORM.get_current_active_window()
 
     try:
-        result = subprocess.run(
-            build_webview_command("popup", UI_LANGUAGE),
-            capture_output=True, text=True
-        )
-        if result.stderr:
-            print(f"[POPUP ERROR] {result.stderr.strip()}")
-        choice = result.stdout.strip()
+        result = run_webview_page("popup", UI_LANGUAGE)
+        if not result:
+            is_processing = False
+            return
+
+        if isinstance(result, dict) and result.get("type") == "open_settings":
+            is_processing = False
+            if show_settings_window():
+                reload_runtime_settings(rebuild_listener=True)
+                print("[SETTINGS] Đã lưu cấu hình mới và áp dụng ngay.")
+            return
+
+        choice = result.get("action_id") if isinstance(result, dict) else str(result)
         if not choice:
             is_processing = False
             return
-        # Lấy text SAU khi user chọn action (primary selection vẫn còn nguyên)
+
         selected_text, selection_error = PLATFORM.get_selected_text(target_window_id=target_window_id)
         if selection_error:
             print(selection_error)
@@ -343,275 +343,100 @@ def show_popup_menu():
             print("[LỖI] Không có văn bản được chọn hoặc trong clipboard.")
             is_processing = False
             return
+
         is_processing = False
-        threading.Thread(target=on_activate, args=(choice, selected_text, target_window_id)).start()
+        threading.Thread(target=on_activate, args=(choice, selected_text, target_window_id), daemon=True).start()
     except Exception as e:
         print(f"Lỗi popup: {e}")
         is_processing = False
 
-def activate_popup(): threading.Thread(target=show_popup_menu).start()
-def start_background_listener():
-    if DEBUG:
-        debug_listener = keyboard.Listener(on_press=on_press)
-        debug_listener.start()
-    
+
+def activate_popup():
+    threading.Thread(target=show_popup_menu, daemon=True).start()
+
+
+class HotkeyListenerManager:
+    def __init__(self):
+        self.listener = None
+        self.lock = threading.Lock()
+
+    def rebuild(self):
+        with self.lock:
+            if self.listener is not None:
+                self.listener.stop()
+                self.listener.join(timeout=1)
+                self.listener = None
+
+            if not HOTKEY_POPUP:
+                print("[HOTKEY] HOTKEY_POPUP đang trống, không đăng ký listener.")
+                return
+
+            try:
+                self.listener = keyboard.GlobalHotKeys({HOTKEY_POPUP: activate_popup})
+                self.listener.start()
+                print(f"[HOTKEY] Listener sẵn sàng với popup hotkey: {HOTKEY_POPUP}")
+            except Exception as e:
+                print(f"[LỖI] Không thể đăng ký popup hotkey '{HOTKEY_POPUP}': {e}")
+                self.listener = None
+
+    def stop(self):
+        with self.lock:
+            if self.listener is not None:
+                self.listener.stop()
+                self.listener.join(timeout=1)
+                self.listener = None
+
+
+HOTKEY_MANAGER = HotkeyListenerManager()
+
+
+def print_startup_banner():
+    popup_summary = ", ".join(f"{action['hotkey']}={action['name']}" for action in SMART_ACTIONS)
+    print("=" * 60)
+    print("KoDauKoVui background service started")
+    print(f"Provider       : {AI_PROVIDER}")
+    print(f"Popup hotkey   : {HOTKEY_POPUP}")
+    print(f"Popup keys     : {popup_summary}")
+    print(f"UI language    : {UI_LANGUAGE}")
+    if not (client or openai_client):
+        print("[WARN] Chưa có API key hợp lệ. Mở popup rồi bấm gear để cấu hình.")
+    print("=" * 60)
+
+
+def run_log_loop():
     try:
-        mapping = {}
-        if HOTKEY: mapping[HOTKEY] = activate_add_marks
-        if HOTKEY_TRANS_EN: mapping[HOTKEY_TRANS_EN] = activate_trans_en
-        if HOTKEY_TRANS_ZHTW: mapping[HOTKEY_TRANS_ZHTW] = activate_trans_zhtw
-        if HOTKEY_TRANS_KHMER: mapping[HOTKEY_TRANS_KHMER] = activate_trans_khmer
-        if HOTKEY_TRANS_VI: mapping[HOTKEY_TRANS_VI] = activate_trans_vi
-        if HOTKEY_QA: mapping[HOTKEY_QA] = activate_qa
-        if HOTKEY_POPUP: mapping[HOTKEY_POPUP] = activate_popup
-            
-        with keyboard.GlobalHotKeys(mapping) as h:
-            h.join()
-    except Exception as e:
-        print(f"Lỗi khi đăng ký hotkey: {e}. Vui lòng kiểm tra cấu hình phím tắt.")
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        print("\nĐang thoát ứng dụng...")
+    finally:
+        HOTKEY_MANAGER.stop()
 
-def capture_hotkey():
-    print("\n>>> Hãy bấm tổ hợp phím tắt mới (VD: Bấm giữ Ctrl + Shift rồi gõ A). Bấm ESC để hủy. <<<")
-    pressed = set()
-    result = []
-    
-    def hk_on_press(key):
-        if key == keyboard.Key.esc:
-            return False
-        pressed.add(key)
-        
-    def hk_on_release(key):
-        nonlocal result
-        has_char = any(hasattr(k, 'char') and k.char is not None for k in pressed)
-        if has_char: 
-            mods = []
-            chars = []
-            for k in pressed:
-                if isinstance(k, keyboard.Key):
-                    name = k.name.split('_')[0]
-                    if f"<{name}>" not in mods:
-                        mods.append(f"<{name}>")
-                elif hasattr(k, 'char') and k.char:
-                    chars.append(k.char.lower())
-            
-            if chars:
-                result.append("+".join(mods + chars))
-                return False
-        
-        if key in pressed:
-            pressed.remove(key)
-            
-    with keyboard.Listener(on_press=hk_on_press, on_release=hk_on_release) as l:
-        l.join()
-        
-    return result[0] if result else None
-
-def config_menu():
-    global GEMINI_API_KEY, GEMINI_MODEL, client, HOTKEY, HOTKEY_TRANS_EN, HOTKEY_TRANS_ZHTW, HOTKEY_TRANS_KHMER, HOTKEY_TRANS_VI, HOTKEY_QA, HOTKEY_POPUP, KEEP_ORIGINAL_TEXT, SHOW_QUESTION_IN_QA, UI_LANGUAGE
-    global AI_PROVIDER, OPENAI_API_KEY, OPENAI_MODEL, openai_client
-    os.system('clear' if os.name == 'posix' else 'cls')
-    print("\n" + "="*50)
-    print("               CÀI ĐẶT CẤU HÌNH               ")
-    print("="*50)
-    hidden_g = f"{GEMINI_API_KEY[:6]}...{GEMINI_API_KEY[-4:]}" if GEMINI_API_KEY and len(GEMINI_API_KEY) > 10 else "Chưa có"
-    hidden_o = f"{OPENAI_API_KEY[:6]}...{OPENAI_API_KEY[-4:]}" if OPENAI_API_KEY and len(OPENAI_API_KEY) > 10 else "Chưa có"
-    print(f"1. Provider hiện tại  : {AI_PROVIDER.upper()}")
-    print(f"2. Cấu hình Gemini    : {GEMINI_MODEL} ({hidden_g})")
-    print(f"3. Cấu hình OpenAI    : {OPENAI_MODEL} ({hidden_o})")
-    print(f"4. Phím tắt Thêm Dấu  : {HOTKEY}")
-    print(f"5. Phím tắt Dịch EN   : {HOTKEY_TRANS_EN}")
-    print(f"6. Phím tắt Dịch Hoa  : {HOTKEY_TRANS_ZHTW}")
-    print(f"7. Phím tắt Dịch Khmer: {HOTKEY_TRANS_KHMER}")
-    print(f"8. Phím tắt Dịch Việt : {HOTKEY_TRANS_VI}")
-    print(f"9. Phím tắt Hỏi đáp AI: {HOTKEY_QA}")
-    print(f"10. Phím tắt Menu Popup: {HOTKEY_POPUP}")
-    print(f"11. Ngôn ngữ Giao diện (UI) : {'Tiếng Việt' if UI_LANGUAGE == 'vi' else 'English'}")
-    print(f"12. Giữ câu hỏi khi Hỏi đáp: {'BẬT' if SHOW_QUESTION_IN_QA else 'TẮT'}")
-    print(f"13. Giữ bản gốc khi dịch: {'BẬT' if KEEP_ORIGINAL_TEXT else 'TẮT'}")
-    print("14. Quay lại")
-    
-    try:
-        c = input("\nChọn chức năng (1-14): ").strip()
-    except (KeyboardInterrupt, EOFError):
-        return
-        
-    if c == '1':
-        AI_PROVIDER = "openai" if AI_PROVIDER == "gemini" else "gemini"
-        set_key(env_file, "AI_PROVIDER", AI_PROVIDER)
-        print(f"Đã chuyển Provider sang: {AI_PROVIDER.upper()}")
-        
-    elif c == '2':
-        new_token = input("Nhập Gemini Token mới (bỏ trống để giữ nguyên): ").strip()
-        if new_token:
-            set_key(env_file, "GEMINI_API_KEY", new_token)
-            GEMINI_API_KEY = new_token
-            client = genai.Client(api_key=GEMINI_API_KEY)
-        
-        new_model = input(f"Nhập Gemini Model mới (hiện tại: {GEMINI_MODEL}, bỏ trống để giữ nguyên): ").strip()
-        if new_model:
-            set_key(env_file, "GEMINI_MODEL", new_model)
-            GEMINI_MODEL = new_model
-        print("Đã cập nhật cấu hình Gemini!")
-            
-    elif c == '3':
-        new_token = input("Nhập OpenAI Token mới (bỏ trống để giữ nguyên): ").strip()
-        if new_token:
-            set_key(env_file, "OPENAI_API_KEY", new_token)
-            OPENAI_API_KEY = new_token
-            openai_client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
-        
-        new_model = input(f"Nhập OpenAI Model mới (hiện tại: {OPENAI_MODEL}, bỏ trống để giữ nguyên): ").strip()
-        if new_model:
-            set_key(env_file, "OPENAI_MODEL", new_model)
-            OPENAI_MODEL = new_model
-        print("Đã cập nhật cấu hình OpenAI!")
-            
-    elif c in ['4', '5', '6', '7', '8', '9', '10']:
-        new_hk = capture_hotkey()
-        if new_hk:
-            mapping_keys = {
-                '4': 'HOTKEY',
-                '5': 'HOTKEY_TRANS_EN',
-                '6': 'HOTKEY_TRANS_ZHTW',
-                '7': 'HOTKEY_TRANS_KHMER',
-                '8': 'HOTKEY_TRANS_VI',
-                '9': 'HOTKEY_QA',
-                '10': 'HOTKEY_POPUP'
-            }
-            key_name = mapping_keys.get(c)
-            set_key(env_file, key_name, new_hk)
-            if c == '4': HOTKEY = new_hk
-            elif c == '5': HOTKEY_TRANS_EN = new_hk
-            elif c == '6': HOTKEY_TRANS_ZHTW = new_hk
-            elif c == '7': HOTKEY_TRANS_KHMER = new_hk
-            elif c == '8': HOTKEY_TRANS_VI = new_hk
-            elif c == '9': HOTKEY_QA = new_hk
-            elif c == '10': HOTKEY_POPUP = PLATFORM.normalize_hotkey(new_hk)
-            print(f"Đã cập nhật {key_name} = {new_hk}")
-            print("LƯU Ý: Vui lòng thoát ứng dụng và mở lại để áp dụng phím tắt mới!")
-            
-    elif c == '11':
-        UI_LANGUAGE = "vi" if UI_LANGUAGE == "en" else "en"
-        set_key(env_file, "UI_LANGUAGE", UI_LANGUAGE)
-        print(f"Đã chuyển Ngôn ngữ Giao diện sang: {'Tiếng Việt' if UI_LANGUAGE == 'vi' else 'English'}")
-
-    elif c == '12':
-        SHOW_QUESTION_IN_QA = not SHOW_QUESTION_IN_QA
-        set_key(env_file, "SHOW_QUESTION_IN_QA", "true" if SHOW_QUESTION_IN_QA else "false")
-        print(f"Đã cập nhật tính năng giữ câu hỏi thành: {'BẬT' if SHOW_QUESTION_IN_QA else 'TẮT'}")
-        
-    elif c == '13':
-        KEEP_ORIGINAL_TEXT = not KEEP_ORIGINAL_TEXT
-        set_key(env_file, "KEEP_ORIGINAL_TEXT", "true" if KEEP_ORIGINAL_TEXT else "false")
-        print(f"Đã cập nhật tính năng giữ bản gốc thành: {'BẬT' if KEEP_ORIGINAL_TEXT else 'TẮT'}")
-
-def show_statistics():
-    history = load_history()
-    learned = load_learned()
-    total_requests = len(history)
-    total_learned = len(learned)
-    total_chars = sum(len(item.get("result", "")) for item in history)
-    
-    manual_time = total_chars / 2.44 if total_chars > 0 else 0
-    tool_time = total_requests * 10.0
-    saved_time = manual_time - tool_time
-    
-    print("\n" + "="*50)
-    print("                BẢNG THỐNG KÊ                 ")
-    print("="*50)
-    print(f" 🔹 Lần Thêm dấu AI: {total_requests}")
-    print(f" 🔹 Ký tự đã xử lý : {total_chars}")
-    print(f" 🔹 Mẫu đã tự học  : {total_learned}")
-    print("-" * 50)
-    if saved_time > 0:
-        print(f" 🎉 THỜI GIAN TIẾT KIỆM: {saved_time:.1f} giây (~{saved_time/60:.1f} phút)")
-    else:
-        print(f" ⚠️ Mẹo: Bôi đen văn bản dài hơn để tiết kiệm TG")
-    print("="*50)
-
-def tui_loop():
-    while True:
-        os.system('clear' if os.name == 'posix' else 'cls')
-        show_statistics()
-        
-        print("\n" + "="*50)
-        print("     AI GÕ DẤU & DỊCH THUẬT - CONTROL PANEL     ")
-        print("="*50)
-        print(f" 🤖 AI Provider : {AI_PROVIDER.upper()}")
-        print(f" ⌨️  Phím tắt kích hoạt:")
-        print(f"   • Thêm dấu tiếng Việt : {HOTKEY}")
-        print(f"   • Dịch sang Tiếng Anh : {HOTKEY_TRANS_EN}")
-        print(f"   • Dịch sang Tiếng Hoa : {HOTKEY_TRANS_ZHTW}")
-        print(f"   • Dịch sang Tiếng Khmer: {HOTKEY_TRANS_KHMER}")
-        print(f"   • Dịch sang Tiếng Việt : {HOTKEY_TRANS_VI}")
-        print(f"   • Hỏi đáp thông minh AI : {HOTKEY_QA}")
-        print(f"   • Menu Popup Chức Năng : {HOTKEY_POPUP}")
-        print("-" * 50)
-        print("1. Xem lịch sử gần đây (history.json)")
-        print("2. Kích hoạt Learning Mode")
-        print("3. Xem danh sách đã học (learned.json)")
-        print("4. Cài đặt (Token, Model, Phím tắt, Dịch thuật)")
-        print("5. Thoát ứng dụng (Exit)")
-        print("="*50)
-        
-        try:
-            choice = input("Lựa chọn của bạn (1-5): ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nĐang thoát ứng dụng...")
-            os._exit(0)
-            
-        if choice == '1':
-            history = load_history()
-            print("\n--- 5 MỤC HISTORY GẦN NHẤT ---")
-            for item in history[-5:]:
-                label = "SỬA" if item.get("user_edit") else " AI"
-                print(f"[{label}] {item.get('original')} -> {item.get('result')}")
-            if len(history) > 5:
-                print(f"... (và {len(history)-5} mục khác)")
-            input("\n(Nhấn Enter để quay lại)")
-        elif choice == '2':
-            run_learning_mode()
-            input("\n(Nhấn Enter để quay lại)")
-        elif choice == '3':
-            learned = load_learned()
-            print("\n--- 5 MỤC CACHE ĐÃ HỌC GẦN NHẤT ---")
-            for k, v in list(learned.items())[-5:]:
-                print(f"Gốc: {k}\nSửa: {v}\n")
-            if len(learned) > 5:
-                print(f"... (và {len(learned)-5} mục khác)")
-            input("\n(Nhấn Enter để quay lại)")
-        elif choice == '4':
-            config_menu()
-            input("\n(Nhấn Enter để quay lại)")
-        elif choice == '5':
-            print("\nĐang thoát ứng dụng...")
-            os._exit(0)
-        else:
-            print("\nLựa chọn không hợp lệ!")
-            time.sleep(1)
 
 def main():
     if len(sys.argv) > 1:
-        if sys.argv[1] == '--learn':
+        if sys.argv[1] == "--learn":
             run_learning_mode()
             return
-        if sys.argv[1] == '--webview':
+        if sys.argv[1] == "--webview":
             from webview_host import run_webview_host
 
-            page = sys.argv[2] if len(sys.argv) > 2 else "qa"
+            page = sys.argv[2] if len(sys.argv) > 2 else "ask"
             ui_lang = sys.argv[3] if len(sys.argv) > 3 else UI_LANGUAGE
-            run_webview_host(page=page, ui_lang=ui_lang)
+            payload = None
+            if len(sys.argv) > 4:
+                try:
+                    payload = json.loads(sys.argv[4])
+                except json.JSONDecodeError:
+                    payload = None
+            run_webview_host(page=page, ui_lang=ui_lang, payload=payload)
             return
 
-    if not initialize_ai_clients(require_api_key=True):
-        sys.exit(1)
+    reload_runtime_settings(rebuild_listener=False)
+    HOTKEY_MANAGER.rebuild()
+    print_startup_banner()
+    run_log_loop()
 
-    # Chạy listener ở background
-    listener_thread = threading.Thread(target=start_background_listener, daemon=True)
-    listener_thread.start()
-    
-    # Chạy giao diện TUI
-    tui_loop()
 
 if __name__ == "__main__":
     main()

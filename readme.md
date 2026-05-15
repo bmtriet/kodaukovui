@@ -1,154 +1,109 @@
 # KoDauKoVui
 
-**KoDauKoVui** là một công cụ tiện ích hỗ trợ AI mạnh mẽ (sử dụng OpenAI hoặc Google Gemini) chạy ngầm trên máy tính, giúp bạn thao tác văn bản nhanh chóng bằng các phím tắt (hotkeys).
-Ứng dụng có giao diện Web UI hiện đại được xây dựng bằng React, Vite và TailwindCSS, hiển thị mượt mà trên desktop thông qua `pywebview`.
+**KoDauKoVui** là một công cụ desktop chạy ngầm để xử lý văn bản được chọn bằng AI. App dùng một popup hotkey chung, sau đó cho bạn chọn **smart action** theo key hoặc click. Popup và Settings UI được render bằng React + `pywebview`.
 
 ## Tính năng chính
-- **Thêm dấu tiếng Việt**: Tự động sửa lỗi và thêm dấu chuẩn xác cho đoạn văn bản tiếng Việt. Hỗ trợ hệ thống học (Learning Mode) từ những lần sửa của người dùng.
-- **Dịch thuật đa ngôn ngữ**: Dịch đoạn văn bản được chọn sang Tiếng Anh, Tiếng Hoa Phồn thể, Tiếng Khmer hoặc Tiếng Việt.
-- **Hỏi đáp AI (Prompt)**: Hiện khung giao diện tiện lợi để nhập câu hỏi/yêu cầu trực tiếp cho AI và nhận câu trả lời vào clipboard.
-- **Giao diện Popup trực quan**: Giao diện UI chọn chức năng (1-6) hiện đại, nhẹ nhàng thay vì phải nhớ quá nhiều phím tắt.
-- **Chèn trực tiếp (Auto-Paste)**: Tự động copy đoạn văn bôi đen, xử lý, và dán trả lại vào vị trí cũ.
+- **Smart Action CRUD**: tạo, sửa, xóa, sắp xếp lại các action ngay trong Settings UI.
+- **Popup keyword flow**: mở popup bằng một hotkey toàn cục, rồi bấm key của action ngay trong popup.
+- **Prompt riêng cho từng action**: mỗi action có prompt riêng, có thể chỉnh trực tiếp bằng dialog.
+- **Ask before run**: từng action có thể bật thêm bước nhập yêu cầu bổ sung trước khi chạy.
+- **Return with source**: từng action có thể trả kết quả kèm nguyên văn source ở dưới.
+- **Auto-paste**: copy đoạn bôi đen, xử lý, rồi dán trả lại vào đúng chỗ cũ.
+- **Settings UI**: cấu hình provider, popup hotkey, debug log và toàn bộ smart action không cần TUI terminal.
+
+## Cấu trúc cấu hình mới
+- `.env`: chỉ giữ cấu hình chung và provider.
+- `smart_actions.json`: danh sách smart action runtime, được tạo tự động ở lần chạy đầu tiên.
+- `smart_actions.example.json`: file mẫu đi kèm repo/bundle để tham khảo hoặc portable setup.
+- `brain.md`: context nền được prepend vào mọi smart action prompt nếu file này tồn tại.
 
 ## Yêu cầu hệ thống
 - Python 3.10-3.13
-- Node.js & npm (để phát triển/build UI React)
-- Môi trường Linux (với X11) hoặc Windows
-- Trên Linux yêu cầu `xclip`; nếu muốn khôi phục focus/popup theo vị trí chuột thì cần `xdotool`
-- Trên Windows, `pywebview` có thể cần browser runtime phù hợp trên một số máy
-- Trên Windows, hiện nên tránh Python 3.14 vì `pywebview` kéo `pythonnet`, và `pythonnet` hiện hỗ trợ `Python < 3.14`
-- Trên Linux, repo dùng backend Qt cho `pywebview` khi build/package; build script sẽ cài thêm dependency từ `requirements-linux.txt`
+- Node.js và npm
+- Linux (X11) hoặc Windows
+- Linux cần `xclip`; nếu muốn restore focus và popup theo vị trí chuột thì cần `xdotool`
+- Windows hiện nên tránh Python 3.14 vì `pywebview` kéo `pythonnet`, và `pythonnet` hiện hỗ trợ `Python < 3.14`
 
-## Packaging đa nền tảng
-- Repo này dùng **một codebase chung** nhưng build ra **artifact riêng cho từng OS**.
-- Không có một binary duy nhất chạy nguyên xi trên Windows và Linux.
-- Build Windows phải chạy trên Windows.
-- Build Linux phải chạy trên Linux.
-- `webui/dist/` là phần UI tĩnh dùng chung; phần executable được PyInstaller đóng gói riêng theo OS.
+## Cài đặt và chạy
 
-## Chính sách hỗ trợ Windows
-- **Supported:** KoDauKoVui chạy bằng quyền user thường và ứng dụng đích cũng chạy bằng quyền user thường.
-- **Limited / unsupported:** tương tác với ứng dụng chạy `Run as administrator` hoặc cửa sổ/UAC ở mức quyền cao hơn.
-- Đóng gói thành `.exe` **không tự động vượt qua giới hạn quyền Windows**. Nếu cửa sổ đích chạy elevated, KoDauKoVui sẽ báo lỗi có kiểm soát thay vì cố dán thất bại âm thầm.
-
-## Cài đặt và Chạy ứng dụng
-
-### Cách 1: Sử dụng script `run.sh` (Khuyên dùng)
-Script `run.sh` sẽ tự động tạo môi trường ảo (virtual environment), cài đặt các gói cần thiết và khởi chạy ứng dụng.
+### Linux
 ```bash
 chmod +x run.sh
 ./run.sh
 ```
 
-### Cách 2: Cài đặt thủ công
-1. **Tạo môi trường ảo và cài đặt thư viện Python**:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   pip install -r requirements-linux.txt
-   ```
-
-2. **Thiết lập API Keys**:
-   Tạo file `.env` từ `.env.example` và điền API Keys của bạn:
-   ```bash
-   cp .env.example .env
-   ```
-   Cập nhật `GEMINI_API_KEY` hoặc `OPENAI_API_KEY` tương ứng bên trong file `.env`.
-
-3. **Chạy ứng dụng**:
-   ```bash
-   python3 main.py
-   ```
-
-### Chạy trên Windows bằng Python
-1. Build Web UI nếu bạn vừa sửa React UI:
-   ```powershell
-   cd webui
-   npm install
-   npm run build
-   cd ..
-   ```
-2. Chạy script:
-   ```powershell
-   run_windows.bat
-   ```
-3. Hoặc chạy tay:
-   ```powershell
-   py -3 -m venv venv
-   venv\Scripts\activate
-   python -m pip install -r requirements.txt
-   python main.py
-   ```
-
-### Đóng gói `.exe` one-folder cho Windows
-1. Build:
-   ```powershell
-   build_windows.bat
-   ```
-2. File kết quả:
-   - `dist\KoDauKoVui\KoDauKoVui.exe`
-   - `dist\KoDauKoVui-windows-x64.zip`
-3. Script này sẽ tự:
-   - tạo `.build-venv`
-   - cài Python dependencies + `pyinstaller`
-   - build lại `webui/dist`
-   - đóng gói PyInstaller one-folder
-   - nén artifact release cho Windows
-4. Giữ `.env` cạnh file `.exe` nếu người dùng cần tự cấu hình API key.
-
-### Đóng gói one-folder cho Linux
-1. Cấp quyền chạy script:
-   ```bash
-   chmod +x build_linux.sh
-   ```
-2. Build:
-   ```bash
-   ./build_linux.sh
-   ```
-3. File kết quả:
-   - `dist/kodaukovui/kodaukovui`
-   - `dist/KoDauKoVui-linux-x64.tar.gz`
-4. Script này sẽ tự:
-   - tạo `.build-venv`
-   - cài Python dependencies + `pyinstaller`
-   - cài thêm Linux `pywebview` backend từ `requirements-linux.txt`
-   - build lại `webui/dist`
-   - đóng gói PyInstaller one-folder
-   - nén artifact release cho Linux
-
-## Ma trận tương thích Windows
-
-| Tình huống | Kết quả mong đợi |
-| --- | --- |
-| KoDauKoVui user thường -> Notepad/Chrome/app thường | Hoạt động |
-| KoDauKoVui user thường -> app đích chạy as Administrator | Không đảm bảo; app sẽ báo lỗi rõ ràng |
-| Chạy bằng Python | Hỗ trợ |
-| Chạy bằng `.exe` one-folder | Hỗ trợ |
-
-## Xây dựng lại Web UI (Dành cho Developer)
-Giao diện popup và hộp thoại hỏi đáp nằm trong thư mục `webui/`. Nếu bạn muốn tùy chỉnh giao diện React, hãy thực hiện các bước sau:
+### Chạy tay
 ```bash
-cd webui
-npm install
-npm run build
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-linux.txt
+cp .env.example .env
+python3 main.py
 ```
-Sau khi build, thư mục `webui/dist/` sẽ chứa các file HTML/JS/CSS tĩnh, Python (`webview_host.py`) sẽ tự động tải giao diện mới từ đây.
 
-## Ghi chú triển khai
-- Bản packaged app trên cả Windows và Linux đều dùng cùng logic runtime với bản Python, bao gồm popup/QA subprocess gọi lại chính executable bằng cờ `--webview`.
-- Dữ liệu ghi được như `.env`, `history.json`, `learned.json` được đặt cạnh executable; asset tĩnh vẫn đi theo bundle.
-- Spec dùng chung là `kodaukovui.spec`, nhưng tên artifact output sẽ đổi theo OS:
-  - Windows: `KoDauKoVui`
-  - Linux: `kodaukovui`
+### Windows
+```powershell
+run_windows.bat
+```
 
-## Cấu hình Phím Tắt (Hotkeys) mặc định
-- Thêm dấu tiếng Việt : `<ctrl>+<f1>`
-- Dịch sang Tiếng Anh : `<ctrl>+<f2>`
-- Dịch sang Tiếng Hoa : `<ctrl>+<f3>`
-- Dịch sang Tiếng Việt : `<ctrl>+<f4>`
-- Dịch sang Tiếng Khmer: `<ctrl>+<f5>`
-- Hỏi đáp thông minh AI: `<ctrl>+<f12>`
-- Bật Menu Popup        : `<ctrl>+.`
+Sau khi app chạy:
+- terminal chỉ hiển thị log cơ bản
+- bấm `Ctrl+'` để mở popup
+- bấm gear để mở Settings UI
 
-*Lưu ý: Các phím tắt này có thể được tùy chỉnh ngay bên trong màn hình Console của ứng dụng (Phím `4`).*
+## Smart action mặc định
+Lần chạy đầu tiên app sẽ tạo `smart_actions.json` với 6 action seed:
+- `1` -> `Thêm dấu tiếng Việt`
+- `e` -> `Translate to English`
+- `v` -> `Translate to Vietnamese`
+- `z` -> `Translate to Traditional Chinese`
+- `k` -> `Translate to Khmer`
+- `a` -> `AI Prompt` (`ask_before_run=true`)
+
+Tất cả action này đều có thể sửa, xóa, đổi thứ tự hoặc thay hotkey trong Settings UI.
+
+## Packaging đa nền tảng
+- Build Windows phải chạy trên Windows:
+  ```powershell
+  build_windows.bat
+  ```
+- Build Linux phải chạy trên Linux:
+  ```bash
+  ./build_linux.sh
+  ```
+
+Artifact:
+- Windows: `dist/KoDauKoVui/KoDauKoVui.exe` và `dist/KoDauKoVui-windows-x64.zip`
+- Linux: `dist/kodaukovui/kodaukovui` và `dist/KoDauKoVui-linux-x64.tar.gz`
+
+Bundle packaged app sẽ mang theo:
+- `webui/dist/`
+- `icons/`
+- `.env.example`
+- `brain.md`
+- `smart_actions.example.json`
+
+Runtime writable files vẫn nằm cạnh executable/script:
+- `.env`
+- `smart_actions.json`
+- `history.json`
+- `learned.json`
+
+## Ghi chú hành vi
+- Chỉ có **một** global hotkey: `HOTKEY_POPUP`
+- Hotkey của từng smart action là **popup-local**, không phải global hotkey riêng
+- Mọi smart action đều chạy qua cùng một pipeline:
+  - nạp `brain.md`
+  - nạp prompt của action
+  - nếu bật `ask_before_run`, mở dialog để lấy yêu cầu bổ sung
+  - append selected text
+  - gửi qua provider hiện tại
+- Nếu bật `return_with_source`, output format là:
+  ```text
+  <result>
+
+  ---
+  Source:
+  <original text>
+  ```

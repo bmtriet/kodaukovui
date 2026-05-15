@@ -1,5 +1,20 @@
-import { useEffect, useState, useRef } from "react"
-import { Send, X, MessageCircle, Type, Languages, Globe, Sparkles, ChevronRight } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  Bot,
+  ChevronRight,
+  Keyboard,
+  Pencil,
+  Plus,
+  Save,
+  Settings,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -7,356 +22,955 @@ declare global {
   interface Window {
     pywebview?: {
       api: {
-        submitQa: (prompt: string, lang: string, length: string, appendQuestion: boolean) => void;
-        cancelQa: () => void;
-        submitPopup: (action: string, targetLang: string) => void;
-        cancelPopup: () => void;
-        setUiLanguage: (lang: string) => void;
+        submitAsk: (prompt: string) => void
+        cancelAsk: () => void
+        submitPopup: (actionId: string) => void
+        cancelPopup: () => void
+        openSettings: () => void
+        setUiLanguage: (lang: string) => void
+        getSettingsSnapshot: () => Promise<SettingsSnapshot>
+        saveSettingsSnapshot: (payload: string) => Promise<{ ok: boolean; error?: string; smart_actions?: SmartAction[] }>
+        closeSettings: (saved: boolean) => void
       }
     }
   }
 }
 
+type PywebviewApi = NonNullable<NonNullable<typeof window.pywebview>["api"]>
+
+type PageKind = "ask" | "popup" | "settings"
+type UiLanguage = "en" | "vi" | "zh"
+
+type GeneralSettings = {
+  AI_PROVIDER: "gemini" | "openai"
+  GEMINI_API_KEY: string
+  GEMINI_MODEL: string
+  OPENAI_API_KEY: string
+  OPENAI_MODEL: string
+  OPENAI_API_BASE: string
+  HOTKEY_POPUP: string
+  UI_LANGUAGE: UiLanguage
+  DEBUG: boolean
+}
+
+type SmartAction = {
+  id: string
+  name: string
+  prompt: string
+  hotkey: string
+  return_with_source: boolean
+  ask_before_run: boolean
+}
+
+type SettingsSnapshot = {
+  settings: GeneralSettings
+  smart_actions: SmartAction[]
+}
+
+type AskPayload = {
+  title?: string
+  placeholder?: string
+}
+
+const defaultSettings: GeneralSettings = {
+  AI_PROVIDER: "gemini",
+  GEMINI_API_KEY: "",
+  GEMINI_MODEL: "gemini-2.5-flash-lite",
+  OPENAI_API_KEY: "",
+  OPENAI_MODEL: "gpt-4o-mini",
+  OPENAI_API_BASE: "https://api.openai.com/v1",
+  HOTKEY_POPUP: "<ctrl>+'",
+  UI_LANGUAGE: "en",
+  DEBUG: false,
+}
+
 const translations = {
   en: {
-    qaTitle: "AI Prompt",
-    qaPlaceholder: "Enter your question or request (Press Enter to send)...",
-    qaLangLabel: "Response Language:",
-    qaLengthLabel: "Length:",
-    qaShort: "Short",
-    qaMedium: "Medium",
-    qaDetailed: "Detailed",
-    qaAppendQ: "Append Question",
-    qaCancel: "Cancel (ESC)",
-    qaSend: "Quick Send",
-    popupTitle: "Select Feature",
-    popupSubtitle: "KoDauKoVui Assistant",
-    popupFooter: "Press 1–6 for quick select, or ESC to cancel.",
-    opt1: "Add Vietnamese Marks",
-    opt2: "Translate to English",
-    opt3: "Translate to Traditional Chinese",
-    opt4: "Translate to Khmer",
-    opt5: "Translate to Vietnamese",
-    opt6: "AI Prompt",
-    flagEn: "🇬🇧 EN",
-    flagVi: "🇻🇳 VI",
-    flagZh: "🇹🇼 ZH"
+    askTitle: "Extra Instruction",
+    askPlaceholder: "Enter additional instruction for this action...",
+    popupTitle: "Smart Actions",
+    popupSubtitle: "Press a configured key or click an action",
+    popupFooter: "Popup-local hotkeys only work while this popup is open.",
+    settingsTitle: "Settings",
+    settingsSubtitle: "General settings and smart actions",
+    close: "Close",
+    saveAll: "Save All",
+    general: "General",
+    provider: "Provider",
+    smartActions: "Smart Actions",
+    popupHotkey: "Global Popup Hotkey",
+    uiLanguage: "UI Language",
+    debug: "Debug logging",
+    providerLabel: "AI Provider",
+    geminiKey: "Gemini API Key",
+    geminiModel: "Gemini Model",
+    openaiKey: "OpenAI API Key",
+    openaiModel: "OpenAI Model",
+    openaiBase: "OpenAI API Base",
+    addAction: "Add Action",
+    edit: "Edit",
+    delete: "Delete",
+    moveUp: "Move Up",
+    moveDown: "Move Down",
+    name: "Name",
+    prompt: "Prompt",
+    hotkey: "Hotkey",
+    askBeforeRun: "Ask before run",
+    returnWithSource: "Return result with source",
+    actionDialogCreate: "Create Smart Action",
+    actionDialogEdit: "Edit Smart Action",
+    cancel: "Cancel",
+    save: "Save",
+    actionsHint: "Each action has its own prompt, popup hotkey, and source-return option.",
+    duplicateKeys: "Smart action hotkeys must be unique.",
+    singleKey: "Each smart action hotkey must be exactly one character.",
+    requiredName: "Action name is required.",
+    requiredPrompt: "Action prompt is required.",
+    savedHint: "Changes are applied immediately after saving.",
+    loadError: "Failed to load settings snapshot.",
   },
   vi: {
-    qaTitle: "Hỏi đáp AI (Prompt)",
-    qaPlaceholder: "Nhập câu hỏi hoặc yêu cầu của bạn (Bấm Enter để gửi)...",
-    qaLangLabel: "Ngôn ngữ trả lời:",
-    qaLengthLabel: "Độ dài:",
-    qaShort: "Ngắn gọn",
-    qaMedium: "Trung bình",
-    qaDetailed: "Chi tiết",
-    qaAppendQ: "Đính kèm câu hỏi",
-    qaCancel: "Hủy (ESC)",
-    qaSend: "Gửi nhanh",
-    popupTitle: "Chọn chức năng",
-    popupSubtitle: "KoDauKoVui Assistant",
-    popupFooter: "Bấm phím 1–6 để chọn nhanh, hoặc ESC để hủy.",
-    opt1: "Thêm dấu tiếng Việt",
-    opt2: "Dịch sang Tiếng Anh",
-    opt3: "Dịch sang Tiếng Hoa Phồn thể",
-    opt4: "Dịch sang Tiếng Khmer",
-    opt5: "Dịch sang Tiếng Việt",
-    opt6: "Hỏi đáp AI",
-    flagEn: "🇬🇧 EN",
-    flagVi: "🇻🇳 VI",
-    flagZh: "🇹🇼 ZH"
+    askTitle: "Yêu cầu bổ sung",
+    askPlaceholder: "Nhập yêu cầu bổ sung cho action này...",
+    popupTitle: "Smart Action",
+    popupSubtitle: "Bấm key đã cấu hình hoặc click vào action",
+    popupFooter: "Popup-local hotkey chỉ có hiệu lực khi popup đang mở.",
+    settingsTitle: "Cài đặt",
+    settingsSubtitle: "Cấu hình chung và smart action",
+    close: "Đóng",
+    saveAll: "Lưu tất cả",
+    general: "Chung",
+    provider: "Provider",
+    smartActions: "Smart Action",
+    popupHotkey: "Phím mở popup toàn cục",
+    uiLanguage: "Ngôn ngữ UI",
+    debug: "Bật debug log",
+    providerLabel: "AI Provider",
+    geminiKey: "Gemini API Key",
+    geminiModel: "Gemini Model",
+    openaiKey: "OpenAI API Key",
+    openaiModel: "OpenAI Model",
+    openaiBase: "OpenAI API Base",
+    addAction: "Thêm action",
+    edit: "Sửa",
+    delete: "Xóa",
+    moveUp: "Lên",
+    moveDown: "Xuống",
+    name: "Tên",
+    prompt: "Prompt",
+    hotkey: "Hotkey",
+    askBeforeRun: "Hỏi thêm trước khi chạy",
+    returnWithSource: "Trả kết với Source",
+    actionDialogCreate: "Tạo smart action",
+    actionDialogEdit: "Sửa smart action",
+    cancel: "Hủy",
+    save: "Lưu",
+    actionsHint: "Mỗi action có prompt, hotkey trong popup và tùy chọn trả kèm source riêng.",
+    duplicateKeys: "Hotkey của smart action không được trùng nhau.",
+    singleKey: "Mỗi hotkey phải đúng một ký tự.",
+    requiredName: "Tên action là bắt buộc.",
+    requiredPrompt: "Prompt action là bắt buộc.",
+    savedHint: "Lưu xong áp dụng ngay, không cần restart.",
+    loadError: "Không tải được cấu hình hiện tại.",
   },
   zh: {
-    qaTitle: "AI 问答",
-    qaPlaceholder: "输入您的问题或要求（按回车发送）...",
-    qaLangLabel: "回答语言:",
-    qaLengthLabel: "长度:",
-    qaShort: "精简",
-    qaMedium: "中等",
-    qaDetailed: "详细",
-    qaAppendQ: "附带问题",
-    qaCancel: "取消 (ESC)",
-    qaSend: "快速发送",
-    popupTitle: "选择功能",
-    popupSubtitle: "KoDauKoVui 助手",
-    popupFooter: "按 1-6 键快速选择，或按 ESC 取消。",
-    opt1: "添加越南语声调",
-    opt2: "翻译成英文",
-    opt3: "翻译成繁体中文",
-    opt4: "翻译成高棉语",
-    opt5: "翻译成越南语",
-    opt6: "AI 问答",
-    flagEn: "🇬🇧 EN",
-    flagVi: "🇻🇳 VI",
-    flagZh: "🇹🇼 ZH"
+    askTitle: "附加要求",
+    askPlaceholder: "输入这个 action 的附加要求...",
+    popupTitle: "Smart Actions",
+    popupSubtitle: "按已配置按键，或点击 action",
+    popupFooter: "这些 action 按键只在当前弹窗打开时生效。",
+    settingsTitle: "设置",
+    settingsSubtitle: "通用设置与 smart action",
+    close: "关闭",
+    saveAll: "全部保存",
+    general: "常规",
+    provider: "模型提供方",
+    smartActions: "Smart Actions",
+    popupHotkey: "全局弹窗快捷键",
+    uiLanguage: "界面语言",
+    debug: "调试日志",
+    providerLabel: "AI Provider",
+    geminiKey: "Gemini API Key",
+    geminiModel: "Gemini Model",
+    openaiKey: "OpenAI API Key",
+    openaiModel: "OpenAI Model",
+    openaiBase: "OpenAI API Base",
+    addAction: "新增 action",
+    edit: "编辑",
+    delete: "删除",
+    moveUp: "上移",
+    moveDown: "下移",
+    name: "名称",
+    prompt: "Prompt",
+    hotkey: "按键",
+    askBeforeRun: "运行前再提问",
+    returnWithSource: "返回结果并附原文",
+    actionDialogCreate: "创建 smart action",
+    actionDialogEdit: "编辑 smart action",
+    cancel: "取消",
+    save: "保存",
+    actionsHint: "每个 action 都有自己的 prompt、弹窗按键和返回原文选项。",
+    duplicateKeys: "Smart action 按键必须唯一。",
+    singleKey: "每个按键必须是单个字符。",
+    requiredName: "必须填写 action 名称。",
+    requiredPrompt: "必须填写 action prompt。",
+    savedHint: "保存后立即生效，无需重启。",
+    loadError: "无法加载当前设置。",
+  },
+}
+
+function parsePayload(): AskPayload {
+  const params = new URLSearchParams(window.location.search)
+  const raw = params.get("payload")
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return {}
   }
 }
 
-interface UiProps {
-  t: any;
-  lang: string;
-  changeLang: (newLang: string) => void;
+function createActionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `action-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function QaUi({ t, lang: uiLang, changeLang }: UiProps) {
+function createEmptyAction(): SmartAction {
+  return {
+    id: createActionId(),
+    name: "",
+    prompt: "",
+    hotkey: "",
+    return_with_source: false,
+    ask_before_run: false,
+  }
+}
+
+function getPywebviewApi(): PywebviewApi | null {
+  return window.pywebview?.api ?? null
+}
+
+function waitForPywebviewApi(timeoutMs = 5000): Promise<PywebviewApi> {
+  const existing = getPywebviewApi()
+  if (existing?.getSettingsSnapshot) {
+    return Promise.resolve(existing)
+  }
+
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+
+    const finish = (api: PywebviewApi | null) => {
+      cleanup()
+      if (api?.getSettingsSnapshot) {
+        resolve(api)
+      } else {
+        reject(new Error("pywebview api is not ready"))
+      }
+    }
+
+    const check = () => {
+      const api = getPywebviewApi()
+      if (api?.getSettingsSnapshot) {
+        finish(api)
+        return
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        finish(null)
+      }
+    }
+
+    const onReady = () => check()
+    const intervalId = window.setInterval(check, 100)
+
+    const cleanup = () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener("pywebviewready", onReady as EventListener)
+    }
+
+    window.addEventListener("pywebviewready", onReady as EventListener)
+    check()
+  })
+}
+
+function InputField(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200 ${props.className || ""}`}
+    />
+  )
+}
+
+function ToggleField({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: (value: boolean) => void
+  label: string
+}) {
+  return (
+    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+      <span className="text-sm text-slate-700">{label}</span>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 rounded-full transition ${checked ? "bg-teal-500" : "bg-slate-300"}`}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
+            checked ? "left-[22px]" : "left-0.5"
+          }`}
+        />
+      </button>
+    </label>
+  )
+}
+
+function SectionCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string
+  icon: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex items-center gap-2 text-slate-800">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+          {icon}
+        </div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  )
+}
+
+function LanguagePills({
+  currentLang,
+  onChange,
+}: {
+  currentLang: UiLanguage
+  onChange: (lang: UiLanguage) => void
+}) {
+  return (
+    <div className="flex gap-1 rounded-md bg-slate-200/60 p-0.5">
+      {(["en", "vi", "zh"] as UiLanguage[]).map((lang) => (
+        <button
+          key={lang}
+          onClick={() => onChange(lang)}
+          className={`rounded px-2 py-1 text-[10px] font-bold transition ${
+            currentLang === lang ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          {lang === "en" ? "🇬🇧" : lang === "vi" ? "🇻🇳" : "🇹🇼"}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function AskUi({
+  t,
+  uiLang,
+  changeLang,
+}: {
+  t: (typeof translations)["en"]
+  uiLang: UiLanguage
+  changeLang: (newLang: UiLanguage) => void
+}) {
+  const payload = parsePayload()
   const [prompt, setPrompt] = useState("")
-  const [lang, setLang] = useState("Auto")
-  const [length, setLength] = useState("medium")
-  const [appendQuestion, setAppendQuestion] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     textareaRef.current?.focus()
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        window.pywebview?.api.cancelQa()
+        window.pywebview?.api.cancelAsk()
       }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
-        submit()
+        window.pywebview?.api.submitAsk(prompt.trim())
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [prompt, lang, length, appendQuestion])
-
-  const submit = () => {
-    window.pywebview?.api.submitQa(prompt.trim(), lang, length, appendQuestion)
-  }
-
-  const langOptions = ["Auto", "VI", "EN", "ZH-tw"]
-  const lengthOptions = [
-    { id: "short", label: t.qaShort },
-    { id: "medium", label: t.qaMedium },
-    { id: "detailed", label: t.qaDetailed }
-  ]
+  }, [prompt])
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50/95 backdrop-blur-md text-slate-900 p-4 font-sans overflow-hidden rounded-xl border border-slate-200/50 shadow-2xl">
-      <div className="pywebview-drag-region flex items-center justify-between mb-3 px-1 cursor-move">
-        <h2 className="text-sm font-bold bg-gradient-to-r from-teal-600 to-blue-600 bg-clip-text text-transparent flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-teal-600" />
-          {t.qaTitle}
-        </h2>
-        <div className="flex gap-2 items-center">
-          <div className="flex gap-1 bg-slate-200/50 p-0.5 rounded-md mr-2">
-            {["en", "vi", "zh"].map((l) => (
-              <button
-                key={l}
-                onClick={() => changeLang(l)}
-                className={`text-[10px] px-1.5 py-0.5 rounded font-bold transition-all ${
-                  uiLang === l ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                {l === "en" ? "🇬🇧" : l === "vi" ? "🇻🇳" : "🇹🇼"}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => window.pywebview?.api.cancelQa()} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-500 transition-colors">
-            <X className="w-4 h-4" />
+    <div className="flex h-screen flex-col overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/95 p-4 font-sans text-slate-900 shadow-2xl backdrop-blur-md">
+      <div className="pywebview-drag-region mb-3 flex cursor-move items-center justify-between px-1">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <Sparkles className="h-4 w-4 text-teal-600" />
+            {payload.title || t.askTitle}
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <LanguagePills currentLang={uiLang} onChange={changeLang} />
+          <button
+            onClick={() => window.pywebview?.api.cancelAsk()}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-200"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="flex-grow relative mb-3">
-        <Textarea 
+      <div className="relative flex-grow">
+        <Textarea
           ref={textareaRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder={t.qaPlaceholder}
-          className="w-full h-full resize-none bg-white border-slate-200 focus-visible:ring-teal-500 focus-visible:border-teal-500 text-sm p-3 shadow-inner rounded-lg"
+          placeholder={payload.placeholder || t.askPlaceholder}
+          className="h-full min-h-36 w-full resize-none rounded-lg border-slate-200 bg-white p-3 text-sm shadow-inner focus-visible:border-teal-500 focus-visible:ring-teal-500"
         />
-        <div className="absolute bottom-2 right-2 text-xs text-slate-400 select-none bg-white/80 px-1 rounded">
-          {prompt.length}/2000
-        </div>
       </div>
-      
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col gap-1.5 flex-1">
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1">{t.qaLangLabel}</label>
-            <div className="flex p-1 bg-slate-200/50 rounded-lg">
-              {langOptions.map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => setLang(opt)}
-                  className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-all font-medium ${
-                    lang === opt 
-                      ? "bg-white text-teal-700 shadow-sm ring-1 ring-teal-200" 
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-                  }`}
-                >
-                  {opt === "Auto" ? "🌐 Auto" : opt === "VI" ? "🇻🇳 VI" : opt === "EN" ? "🇬🇧 EN" : "🇹🇼 ZH"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5 flex-1">
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1">{t.qaLengthLabel}</label>
-            <div className="flex p-1 bg-slate-200/50 rounded-lg">
-              {lengthOptions.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => setLength(opt.id)}
-                  className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-all font-medium ${
-                    length === opt.id 
-                      ? "bg-white text-teal-700 shadow-sm ring-1 ring-teal-200" 
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
 
-        <div className="flex items-center justify-between pt-1">
-          <label className="flex items-center gap-2 cursor-pointer group">
-            <div className="relative flex items-center">
-              <input 
-                type="checkbox" 
-                className="peer sr-only"
-                checked={appendQuestion}
-                onChange={(e) => setAppendQuestion(e.target.checked)}
-              />
-              <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-teal-500"></div>
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="outline" onClick={() => window.pywebview?.api.cancelAsk()} className="h-8 px-3 text-xs">
+          {t.cancel}
+        </Button>
+        <Button onClick={() => window.pywebview?.api.submitAsk(prompt.trim())} className="h-8 px-4 text-xs">
+          {t.save}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function PopupUi({
+  t,
+  uiLang,
+  changeLang,
+  actions,
+}: {
+  t: (typeof translations)["en"]
+  uiLang: UiLanguage
+  changeLang: (newLang: UiLanguage) => void
+  actions: SmartAction[]
+}) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        window.pywebview?.api.cancelPopup()
+        return
+      }
+      const match = actions.find((action) => action.hotkey.toLowerCase() === e.key.toLowerCase())
+      if (match) {
+        window.pywebview?.api.submitPopup(match.id)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [actions])
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/95 font-sans shadow-2xl backdrop-blur-md">
+      <div className="pywebview-drag-region flex cursor-move items-center border-b border-slate-200/50 bg-white/60 p-4">
+        <div className="mr-3 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-blue-100 shadow-inner">
+          <Sparkles className="h-4 w-4 text-teal-600" />
+        </div>
+        <div className="flex-grow">
+          <h2 className="text-sm font-bold text-slate-800">{t.popupTitle}</h2>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t.popupSubtitle}</p>
+        </div>
+        <div className="mr-2">
+          <LanguagePills currentLang={uiLang} onChange={changeLang} />
+        </div>
+        <button
+          onClick={() => window.pywebview?.api.openSettings()}
+          className="mr-1 flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-200 hover:text-teal-600"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => window.pywebview?.api.cancelPopup()}
+          className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-grow overflow-y-auto px-2 py-3">
+        {actions.map((action) => (
+          <button
+            key={action.id}
+            onClick={() => window.pywebview?.api.submitPopup(action.id)}
+            className="mb-1 flex w-full items-center rounded-lg border border-transparent px-3 py-2.5 text-left transition-all hover:border-slate-200/50 hover:bg-white hover:shadow-sm"
+          >
+            <div className="mr-3 flex h-7 w-7 items-center justify-center rounded bg-white text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">
+              {action.hotkey.toUpperCase()}
             </div>
-            <span className="text-xs font-medium text-slate-600 group-hover:text-slate-800 transition-colors select-none">{t.qaAppendQ}</span>
-          </label>
-          
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => window.pywebview?.api.cancelQa()} className="border-slate-200 hover:bg-slate-100 text-xs h-8 px-3">
-              {t.qaCancel}
-            </Button>
-            <Button onClick={submit} className="bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white text-xs h-8 px-4 shadow-md transition-all hover:shadow-lg">
-              <Send className="w-3.5 h-3.5 mr-1.5" />
-              {t.qaSend}
-            </Button>
+            <div className="min-w-0 flex-grow">
+              <div className="truncate text-sm font-medium text-slate-800">{action.name}</div>
+              <div className="truncate text-xs text-slate-500">
+                {action.ask_before_run ? "Ask before run" : "Run directly"}
+                {action.return_with_source ? " • With source" : ""}
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-slate-300" />
+          </button>
+        ))}
+      </div>
+
+      <div className="border-t border-slate-200/50 bg-slate-100/50 p-3 text-center">
+        <p className="text-[11px] font-medium text-slate-500">{t.popupFooter}</p>
+      </div>
+    </div>
+  )
+}
+
+function SmartActionDialog({
+  t,
+  initialAction,
+  onClose,
+  onSave,
+}: {
+  t: (typeof translations)["en"]
+  initialAction: SmartAction
+  onClose: () => void
+  onSave: (action: SmartAction) => void
+}) {
+  const [draft, setDraft] = useState<SmartAction>({ ...initialAction })
+  const [error, setError] = useState("")
+
+  const submit = () => {
+    const hotkey = draft.hotkey.trim().toLowerCase()
+    if (!draft.name.trim()) {
+      setError(t.requiredName)
+      return
+    }
+    if (!draft.prompt.trim()) {
+      setError(t.requiredPrompt)
+      return
+    }
+    if (hotkey.length !== 1) {
+      setError(t.singleKey)
+      return
+    }
+    onSave({
+      ...draft,
+      name: draft.name.trim(),
+      prompt: draft.prompt.trim(),
+      hotkey,
+    })
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+      <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <h3 className="text-sm font-semibold text-slate-900">
+            {initialAction.name ? t.actionDialogEdit : t.actionDialogCreate}
+          </h3>
+          <button onClick={onClose} className="rounded-full p-1 text-slate-500 hover:bg-slate-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          <div className="grid gap-4 md:grid-cols-[1fr_120px]">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.name}</label>
+              <InputField value={draft.name} onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.hotkey}</label>
+              <InputField
+                maxLength={1}
+                value={draft.hotkey}
+                onChange={(e) => setDraft((prev) => ({ ...prev, hotkey: e.target.value.toLowerCase() }))}
+              />
+            </div>
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.prompt}</label>
+            <Textarea
+              value={draft.prompt}
+              onChange={(e) => setDraft((prev) => ({ ...prev, prompt: e.target.value }))}
+              className="min-h-40 bg-white"
+            />
+          </div>
+          <ToggleField
+            checked={draft.ask_before_run}
+            onChange={(value) => setDraft((prev) => ({ ...prev, ask_before_run: value }))}
+            label={t.askBeforeRun}
+          />
+          <ToggleField
+            checked={draft.return_with_source}
+            onChange={(value) => setDraft((prev) => ({ ...prev, return_with_source: value }))}
+            label={t.returnWithSource}
+          />
+          {error ? (
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+          <Button variant="outline" onClick={onClose}>
+            {t.cancel}
+          </Button>
+          <Button onClick={submit}>{t.save}</Button>
         </div>
       </div>
     </div>
   )
 }
 
-function PopupUi({ t, lang: uiLang, changeLang }: UiProps) {
-  const POPUP_OPTIONS = [
-    { num: "1", label: t.opt1, icon: Type, action: "add_marks", color: "text-blue-600", bg: "bg-blue-50" },
-    { num: "2", label: t.opt2, icon: Languages, action: "trans_en", color: "text-green-600", bg: "bg-green-50" },
-    { num: "3", label: t.opt3, icon: Globe, action: "trans_zhtw", color: "text-orange-600", bg: "bg-orange-50" },
-    { num: "4", label: t.opt4, icon: Globe, action: "trans_khmer", color: "text-purple-600", bg: "bg-purple-50" },
-    { num: "5", label: t.opt5, icon: Globe, action: "trans_vi", color: "text-red-600", bg: "bg-red-50" },
-    { num: "6", label: t.opt6, icon: MessageCircle, action: "qa", color: "text-teal-600", bg: "bg-teal-50" },
-  ]
+function SettingsUi({
+  t,
+  settings,
+  actions,
+  onSettingsChange,
+  onActionsChange,
+  onLanguageChange,
+}: {
+  t: (typeof translations)["en"]
+  settings: GeneralSettings
+  actions: SmartAction[]
+  onSettingsChange: React.Dispatch<React.SetStateAction<GeneralSettings>>
+  onActionsChange: React.Dispatch<React.SetStateAction<SmartAction[]>>
+  onLanguageChange: (newLang: UiLanguage) => void
+}) {
+  const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [editingAction, setEditingAction] = useState<SmartAction | null>(null)
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        window.pywebview?.api.cancelPopup()
-      }
-      const opt = POPUP_OPTIONS.find(o => o.num === e.key)
-      if (opt) {
-        window.pywebview?.api.submitPopup(opt.action, "")
-      }
+  const updateField = <K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) => {
+    onSettingsChange((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const normalizedKeys = useMemo(() => actions.map((action) => action.hotkey.trim().toLowerCase()), [actions])
+  const hasDuplicateKeys = normalizedKeys.length !== new Set(normalizedKeys).size
+  const hasInvalidKey = normalizedKeys.some((key) => key.length !== 1)
+  const hasBlankName = actions.some((action) => !action.name.trim())
+  const hasBlankPrompt = actions.some((action) => !action.prompt.trim())
+
+  const saveAll = async () => {
+    if (hasDuplicateKeys) {
+      setError(t.duplicateKeys)
+      return
     }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [])
+    if (hasInvalidKey) {
+      setError(t.singleKey)
+      return
+    }
+    if (hasBlankName) {
+      setError(t.requiredName)
+      return
+    }
+    if (hasBlankPrompt) {
+      setError(t.requiredPrompt)
+      return
+    }
+
+    setError("")
+    setSaving(true)
+
+    const payload = {
+      settings: {
+        ...settings,
+        HOTKEY_POPUP: settings.HOTKEY_POPUP.trim(),
+        UI_LANGUAGE: settings.UI_LANGUAGE,
+      },
+      smart_actions: actions.map((action) => ({
+        ...action,
+        name: action.name.trim(),
+        prompt: action.prompt.trim(),
+        hotkey: action.hotkey.trim().toLowerCase(),
+      })),
+    }
+
+    const response = await window.pywebview?.api.saveSettingsSnapshot(JSON.stringify(payload))
+    if (!response?.ok) {
+      setSaving(false)
+      setError(response?.error || "Failed to save settings.")
+      return
+    }
+
+    onActionsChange(response.smart_actions || payload.smart_actions)
+    window.pywebview?.api.closeSettings(true)
+  }
+
+  const saveDialogAction = (nextAction: SmartAction) => {
+    const exists = actions.some((action) => action.id === nextAction.id)
+    if (exists) {
+      onActionsChange((prev) => prev.map((action) => (action.id === nextAction.id ? nextAction : action)))
+    } else {
+      onActionsChange((prev) => [...prev, nextAction])
+    }
+    setEditingAction(null)
+  }
+
+  const moveAction = (id: string, direction: -1 | 1) => {
+    onActionsChange((prev) => {
+      const index = prev.findIndex((action) => action.id === id)
+      const nextIndex = index + direction
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.length) return prev
+      const next = [...prev]
+      const [item] = next.splice(index, 1)
+      next.splice(nextIndex, 0, item)
+      return next
+    })
+  }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50/95 backdrop-blur-md font-sans select-none border border-slate-200/50 shadow-2xl rounded-xl overflow-hidden">
-      <div className="pywebview-drag-region flex items-center p-4 bg-white/50 border-b border-slate-200/50 cursor-move">
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-100 to-blue-100 flex items-center justify-center mr-3 shadow-inner">
-          <Sparkles className="w-4 h-4 text-teal-600" />
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 font-sans text-slate-900">
+      <div className="pywebview-drag-region flex cursor-move items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+            <Settings className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">{t.settingsTitle}</h2>
+            <p className="text-xs text-slate-500">{t.settingsSubtitle}</p>
+          </div>
         </div>
-        <div className="flex-grow">
-          <h2 className="text-sm font-bold text-slate-800">{t.popupTitle}</h2>
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{t.popupSubtitle}</p>
+        <div className="flex items-center gap-2">
+          <LanguagePills currentLang={settings.UI_LANGUAGE} onChange={onLanguageChange} />
+          <Button variant="outline" size="sm" onClick={() => window.pywebview?.api.closeSettings(false)}>
+            {t.close}
+          </Button>
+          <Button size="sm" onClick={saveAll} disabled={saving}>
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            {t.saveAll}
+          </Button>
         </div>
-        <button onClick={() => window.pywebview?.api.cancelPopup()} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors">
-          <X className="w-4 h-4" />
-        </button>
       </div>
 
-      <div className="flex px-3 pt-3 gap-2 justify-center">
-        <button 
-          onClick={() => changeLang("en")} 
-          className={`flex-1 flex flex-col items-center justify-center p-2 rounded-lg bg-white border transition-all shadow-sm group ${
-            uiLang === "en" ? "border-teal-500 bg-teal-50/50 text-teal-700" : "border-slate-200 hover:border-slate-300"
-          }`}
-        >
-          <span className="text-lg mb-1 group-hover:scale-110 transition-transform">🇬🇧</span>
-          <span className={`text-[10px] font-bold uppercase ${uiLang === "en" ? "text-teal-600" : "text-slate-500"}`}>English</span>
-        </button>
-        <button 
-          onClick={() => changeLang("vi")} 
-          className={`flex-1 flex flex-col items-center justify-center p-2 rounded-lg bg-white border transition-all shadow-sm group ${
-            uiLang === "vi" ? "border-teal-500 bg-teal-50/50 text-teal-700" : "border-slate-200 hover:border-slate-300"
-          }`}
-        >
-          <span className="text-lg mb-1 group-hover:scale-110 transition-transform">🇻🇳</span>
-          <span className={`text-[10px] font-bold uppercase ${uiLang === "vi" ? "text-teal-600" : "text-slate-500"}`}>Tiếng Việt</span>
-        </button>
-        <button 
-          onClick={() => changeLang("zh")} 
-          className={`flex-1 flex flex-col items-center justify-center p-2 rounded-lg bg-white border transition-all shadow-sm group ${
-            uiLang === "zh" ? "border-teal-500 bg-teal-50/50 text-teal-700" : "border-slate-200 hover:border-slate-300"
-          }`}
-        >
-          <span className="text-lg mb-1 group-hover:scale-110 transition-transform">🇹🇼</span>
-          <span className={`text-[10px] font-bold uppercase ${uiLang === "zh" ? "text-teal-600" : "text-slate-500"}`}>中文</span>
-        </button>
-      </div>
-      
-      <div className="flex-grow overflow-y-auto py-2 px-2 bg-transparent">
-        {POPUP_OPTIONS.map((opt) => (
-          <div 
-            key={opt.num}
-            onClick={() => window.pywebview?.api.submitPopup(opt.action, "")}
-            className="flex items-center px-3 py-2.5 mb-1 rounded-lg hover:bg-white cursor-pointer transition-all group hover:shadow-sm border border-transparent hover:border-slate-200/50"
-          >
-            <div className="w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-200 text-slate-500 font-bold text-xs mr-3 shadow-sm group-hover:border-teal-300 group-hover:text-teal-600 transition-colors">
-              {opt.num}
+      <div className="flex-1 overflow-y-auto p-5">
+        <div className="mx-auto max-w-6xl space-y-4">
+          <SectionCard title={t.general} icon={<Sparkles className="h-4 w-4" />}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.uiLanguage}</label>
+                <select
+                  value={settings.UI_LANGUAGE}
+                  onChange={(e) => updateField("UI_LANGUAGE", e.target.value as UiLanguage)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+                >
+                  <option value="en">English</option>
+                  <option value="vi">Tiếng Việt</option>
+                  <option value="zh">中文</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.popupHotkey}</label>
+                <InputField value={settings.HOTKEY_POPUP} onChange={(e) => updateField("HOTKEY_POPUP", e.target.value)} />
+              </div>
             </div>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${opt.bg}`}>
-              <opt.icon className={`w-4 h-4 ${opt.color}`} />
+            <ToggleField checked={settings.DEBUG} onChange={(value) => updateField("DEBUG", value)} label={t.debug} />
+          </SectionCard>
+
+          <SectionCard title={t.provider} icon={<Bot className="h-4 w-4" />}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.providerLabel}</label>
+                <select
+                  value={settings.AI_PROVIDER}
+                  onChange={(e) => updateField("AI_PROVIDER", e.target.value as "gemini" | "openai")}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+                >
+                  <option value="gemini">Gemini</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.geminiModel}</label>
+                <InputField value={settings.GEMINI_MODEL} onChange={(e) => updateField("GEMINI_MODEL", e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.geminiKey}</label>
+                <InputField type="password" value={settings.GEMINI_API_KEY} onChange={(e) => updateField("GEMINI_API_KEY", e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiModel}</label>
+                <InputField value={settings.OPENAI_MODEL} onChange={(e) => updateField("OPENAI_MODEL", e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiKey}</label>
+                <InputField type="password" value={settings.OPENAI_API_KEY} onChange={(e) => updateField("OPENAI_API_KEY", e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiBase}</label>
+                <InputField value={settings.OPENAI_API_BASE} onChange={(e) => updateField("OPENAI_API_BASE", e.target.value)} />
+              </div>
             </div>
-            <span className="flex-grow text-sm font-medium text-slate-700 group-hover:text-slate-900">{opt.label}</span>
-            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-500 transform group-hover:translate-x-1 transition-all" />
+          </SectionCard>
+
+          <SectionCard title={t.smartActions} icon={<Keyboard className="h-4 w-4" />}>
+            <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+              <p className="text-sm text-slate-600">{t.actionsHint}</p>
+              <Button size="sm" onClick={() => setEditingAction(createEmptyAction())}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                {t.addAction}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {actions.map((action, index) => (
+                <div key={action.id} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+                  <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-700">
+                    {action.hotkey.toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-grow">
+                    <div className="text-sm font-semibold text-slate-900">{action.name}</div>
+                    <div className="mt-1 line-clamp-2 text-xs text-slate-500">{action.prompt}</div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                      <span className="rounded bg-slate-100 px-2 py-1">
+                        {action.ask_before_run ? t.askBeforeRun : "Run direct"}
+                      </span>
+                      {action.return_with_source ? (
+                        <span className="rounded bg-slate-100 px-2 py-1">{t.returnWithSource}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="icon" onClick={() => moveAction(action.id, -1)} disabled={index === 0}>
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={() => moveAction(action.id, 1)} disabled={index === actions.length - 1}>
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={() => setEditingAction(action)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => onActionsChange((prev) => prev.filter((item) => item.id !== action.id))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
+            {error ? (
+              <span className="flex items-center gap-2 font-medium text-red-600">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </span>
+            ) : (
+              t.savedHint
+            )}
           </div>
-        ))}
+        </div>
       </div>
-      
-      <div className="p-3 bg-slate-100/50 border-t border-slate-200/50 text-center">
-        <p className="text-[11px] text-slate-500 font-medium">{t.popupFooter}</p>
-      </div>
+
+      {editingAction ? (
+        <SmartActionDialog
+          t={t}
+          initialAction={editingAction}
+          onClose={() => setEditingAction(null)}
+          onSave={saveDialogAction}
+        />
+      ) : null}
     </div>
   )
 }
 
 export default function App() {
-  const [page, setPage] = useState("qa")
-  const [lang, setLang] = useState("en")
+  const [page, setPage] = useState<PageKind>("ask")
+  const [lang, setLang] = useState<UiLanguage>("en")
+  const [settings, setSettings] = useState<GeneralSettings>(defaultSettings)
+  const [actions, setActions] = useState<SmartAction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get("page") === "popup") {
-      setPage("popup")
-    }
-    const initialLang = params.get("uilang") || "en"
-    if (["en", "vi", "zh"].includes(initialLang.toLowerCase())) {
-      setLang(initialLang.toLowerCase())
+    const pageParam = params.get("page")
+    if (pageParam === "popup" || pageParam === "settings" || pageParam === "ask") {
+      setPage(pageParam)
     }
   }, [])
 
-  const changeLang = (newLang: string) => {
+  useEffect(() => {
+    let mounted = true
+    const hydrate = async () => {
+      try {
+        const api = await waitForPywebviewApi()
+        const snapshot = await api.getSettingsSnapshot()
+        if (snapshot && mounted) {
+          setSettings({ ...defaultSettings, ...snapshot.settings })
+          setActions(snapshot.smart_actions || [])
+          setLang((snapshot.settings?.UI_LANGUAGE || "en") as UiLanguage)
+        }
+      } catch {
+        if (mounted) {
+          setLoadError((translations[lang] || translations.en).loadError)
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+    hydrate()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const changeLang = (newLang: UiLanguage) => {
     setLang(newLang)
+    setSettings((prev) => ({ ...prev, UI_LANGUAGE: newLang }))
     window.pywebview?.api.setUiLanguage(newLang)
   }
 
-  const t = lang === "vi" ? translations.vi : lang === "zh" ? translations.zh : translations.en;
+  const t = translations[lang] || translations.en
 
-  if (page === "popup") return <PopupUi t={t} lang={lang} changeLang={changeLang} />
-  return <QaUi t={t} lang={lang} changeLang={changeLang} />
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading...</div>
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 p-6">
+        <div className="rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-600 shadow-sm">{loadError}</div>
+      </div>
+    )
+  }
+
+  if (page === "popup") {
+    return <PopupUi t={t} uiLang={lang} changeLang={changeLang} actions={actions} />
+  }
+
+  if (page === "settings") {
+    return (
+      <SettingsUi
+        t={t}
+        settings={settings}
+        actions={actions}
+        onSettingsChange={setSettings}
+        onActionsChange={setActions}
+        onLanguageChange={changeLang}
+      />
+    )
+  }
+
+  return <AskUi t={t} uiLang={lang} changeLang={changeLang} />
 }

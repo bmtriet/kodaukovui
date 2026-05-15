@@ -1,0 +1,50 @@
+[
+  {
+    "id": "add-vietnamese-marks",
+    "name": "Thêm dấu tiếng Việt",
+    "prompt": "Bạn là chuyên gia tiếng Việt. Hãy thêm dấu chuẩn xác nhất cho đoạn văn bản được cung cấp. Chỉ trả về văn bản đã thêm dấu, không giải thích, không thêm bình luận.",
+    "hotkey": "1",
+    "return_with_source": false,
+    "ask_before_run": false
+  },
+  {
+    "id": "translate-to-english",
+    "name": "Translate to English",
+    "prompt": "Translate the provided text into natural English. Return only the translated text. Do not explain your answer.",
+    "hotkey": "e",
+    "return_with_source": false,
+    "ask_before_run": false
+  },
+  {
+    "id": "translate-to-vietnamese",
+    "name": "Translate to Vietnamese",
+    "prompt": "Hãy dịch đoạn văn bản được cung cấp sang tiếng Việt tự nhiên. Chỉ trả về bản dịch, không giải thích.",
+    "hotkey": "v",
+    "return_with_source": false,
+    "ask_before_run": false
+  },
+  {
+    "id": "translate-to-zh-tw",
+    "name": "Translate to Traditional Chinese",
+    "prompt": "Translate the provided text into Traditional Chinese used in Taiwan. Return only the translated text without explanations.",
+    "hotkey": "z",
+    "return_with_source": false,
+    "ask_before_run": false
+  },
+  {
+    "id": "translate-to-khmer",
+    "name": "Translate to Khmer",
+    "prompt": "Translate the provided text into natural Khmer. Return only the translated text without explanations.",
+    "hotkey": "k",
+    "return_with_source": false,
+    "ask_before_run": false
+  },
+  {
+    "id": "ai-prompt",
+    "name": "AI Prompt",
+    "prompt": "You are a helpful AI assistant. Apply the user's additional instruction to the provided text. Return the final answer directly unless the user's instruction asks for a different output format.",
+    "hotkey": "a",
+    "return_with_source": false,
+    "ask_before_run": true
+  }
+]

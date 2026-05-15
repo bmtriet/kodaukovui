@@ -12,7 +12,7 @@ datas = [
     (str(project_root / "webui" / "dist"), "webui/dist"),
 ]
 
-for optional_file in [".env.example", "brain.md"]:
+for optional_file in [".env.example", "brain.md", "smart_actions.example.json"]:
     path = project_root / optional_file
     if path.exists():
         datas.append((str(path), "."))

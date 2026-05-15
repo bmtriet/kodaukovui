@@ -3,6 +3,7 @@ venv/
 __pycache__/
 *.pyc
 .env
+smart_actions.json
 history.json
 learned.json
 build/
