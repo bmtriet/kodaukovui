@@ -28,6 +28,17 @@ BOOLEAN_FIELDS = {"DEBUG"}
 LANGUAGE_OPTIONS = {"en", "vi", "zh"}
 PROVIDER_OPTIONS = {"gemini", "openai"}
 
+BUILTIN_POPUP_ACTIONS = [
+    {
+        "id": "image_ask",
+        "name": "Ask by Image",
+        "hotkey": "i",
+        "kind": "image_ask",
+    }
+]
+
+BUILTIN_POPUP_HOTKEYS = {action["hotkey"] for action in BUILTIN_POPUP_ACTIONS}
+
 DEFAULT_SMART_ACTIONS = [
     {
         "id": "add-vietnamese-marks",
@@ -229,6 +240,9 @@ def validate_smart_actions_payload(payload: list[dict[str, Any]]) -> list[dict[s
     hotkeys = [item["hotkey"] for item in normalized_actions]
     if len(set(hotkeys)) != len(hotkeys):
         raise ValueError("Smart action hotkeys must be unique.")
+    if BUILTIN_POPUP_HOTKEYS.intersection(hotkeys):
+        reserved = ", ".join(sorted(BUILTIN_POPUP_HOTKEYS.intersection(hotkeys)))
+        raise ValueError(f"Smart action hotkeys cannot use reserved built-in keys: {reserved}.")
 
     ids = [item["id"] for item in normalized_actions]
     if len(set(ids)) != len(ids):
@@ -270,4 +284,5 @@ def load_settings_snapshot(env_path: str | Path, actions_path: str | Path) -> di
     return {
         "settings": load_settings(env_path),
         "smart_actions": load_smart_actions(actions_path),
+        "builtin_actions": deepcopy(BUILTIN_POPUP_ACTIONS),
     }

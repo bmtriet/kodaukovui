@@ -9,6 +9,7 @@
 - **Ask before run**: từng action có thể bật thêm bước nhập yêu cầu bổ sung trước khi chạy.
 - **Return with source**: từng action có thể trả kết quả kèm nguyên văn source ở dưới.
 - **Auto-paste**: copy đoạn bôi đen, xử lý, rồi dán trả lại vào đúng chỗ cũ.
+- **Image QA built-in action**: bấm `i` trong popup để hỏi AI bằng ảnh clipboard hoặc ROI screenshot.
 - **Settings UI**: cấu hình provider, popup hotkey, debug log và toàn bộ smart action không cần TUI terminal.
 
 ## Cấu trúc cấu hình mới
@@ -16,6 +17,7 @@
 - `smart_actions.json`: danh sách smart action runtime, được tạo tự động ở lần chạy đầu tiên.
 - `smart_actions.example.json`: file mẫu đi kèm repo/bundle để tham khảo hoặc portable setup.
 - `brain.md`: context nền được prepend vào mọi smart action prompt nếu file này tồn tại.
+- built-in image action `i` là action runtime cố định, không nằm trong `smart_actions.json`
 
 ## Yêu cầu hệ thống
 - Python 3.10-3.13
@@ -61,7 +63,11 @@ Lần chạy đầu tiên app sẽ tạo `smart_actions.json` với 6 action see
 - `k` -> `Translate to Khmer`
 - `a` -> `AI Prompt` (`ask_before_run=true`)
 
+Ngoài ra popup luôn có thêm built-in action:
+- `i` -> `Ask by Image`
+
 Tất cả action này đều có thể sửa, xóa, đổi thứ tự hoặc thay hotkey trong Settings UI.
+Riêng `i` là built-in action, không sửa/xóa trong Settings UI ở phiên bản này.
 
 ## Packaging đa nền tảng
 - Build Windows phải chạy trên Windows:
@@ -93,6 +99,7 @@ Runtime writable files vẫn nằm cạnh executable/script:
 ## Ghi chú hành vi
 - Chỉ có **một** global hotkey: `HOTKEY_POPUP`
 - Hotkey của từng smart action là **popup-local**, không phải global hotkey riêng
+- Built-in image action `i` cũng là popup-local
 - Mọi smart action đều chạy qua cùng một pipeline:
   - nạp `brain.md`
   - nạp prompt của action
@@ -107,3 +114,8 @@ Runtime writable files vẫn nằm cạnh executable/script:
   Source:
   <original text>
   ```
+- Với built-in image action `i`:
+  - app ưu tiên lấy ảnh từ clipboard
+  - nếu clipboard không có ảnh thì mở ROI overlay để user drag một vùng màn hình
+  - sau khi có ảnh, app luôn mở ask dialog để lấy câu hỏi
+  - AI trả về text và app sẽ paste kết quả lại vào cửa sổ đang dùng trước đó

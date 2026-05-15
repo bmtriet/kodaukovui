@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 
 from settings_store import (
+    BUILTIN_POPUP_ACTIONS,
     load_settings,
+    load_settings_snapshot,
     load_smart_actions,
     save_settings,
     save_smart_actions,
@@ -32,6 +34,21 @@ class SettingsStoreTests(unittest.TestCase):
                 "return_with_source": False,
                 "ask_before_run": True,
             },
+        ]
+
+        with self.assertRaises(ValueError):
+            validate_smart_actions_payload(actions)
+
+    def test_validate_rejects_reserved_builtin_hotkey(self):
+        actions = [
+            {
+                "id": "image-conflict",
+                "name": "Image conflict",
+                "prompt": "Prompt one",
+                "hotkey": "i",
+                "return_with_source": False,
+                "ask_before_run": False,
+            }
         ]
 
         with self.assertRaises(ValueError):
@@ -94,6 +111,15 @@ class SettingsStoreTests(unittest.TestCase):
         self.assertEqual(loaded[0]["hotkey"], "q")
         self.assertTrue(loaded[0]["return_with_source"])
         self.assertTrue(loaded[0]["ask_before_run"])
+
+    def test_settings_snapshot_includes_builtin_actions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            actions_path = Path(tmpdir) / "smart_actions.json"
+            snapshot = load_settings_snapshot(env_path, actions_path)
+
+        self.assertIn("builtin_actions", snapshot)
+        self.assertEqual(snapshot["builtin_actions"], BUILTIN_POPUP_ACTIONS)
 
 
 if __name__ == "__main__":

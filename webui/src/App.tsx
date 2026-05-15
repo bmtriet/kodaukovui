@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Bot,
   ChevronRight,
+  Image,
   Keyboard,
   Pencil,
   Plus,
@@ -62,9 +63,17 @@ type SmartAction = {
   ask_before_run: boolean
 }
 
+type BuiltinAction = {
+  id: string
+  name: string
+  hotkey: string
+  kind: "image_ask"
+}
+
 type SettingsSnapshot = {
   settings: GeneralSettings
   smart_actions: SmartAction[]
+  builtin_actions?: BuiltinAction[]
 }
 
 type AskPayload = {
@@ -91,6 +100,7 @@ const translations = {
     popupTitle: "Smart Actions",
     popupSubtitle: "Press a configured key or click an action",
     popupFooter: "Popup-local hotkeys only work while this popup is open.",
+    imageActionHint: "Ask about clipboard image or draw an ROI capture.",
     settingsTitle: "Settings",
     settingsSubtitle: "General settings and smart actions",
     close: "Close",
@@ -123,6 +133,7 @@ const translations = {
     save: "Save",
     actionsHint: "Each action has its own prompt, popup hotkey, and source-return option.",
     duplicateKeys: "Smart action hotkeys must be unique.",
+    reservedKeys: "Some smart action hotkeys are reserved for built-in actions.",
     singleKey: "Each smart action hotkey must be exactly one character.",
     requiredName: "Action name is required.",
     requiredPrompt: "Action prompt is required.",
@@ -135,6 +146,7 @@ const translations = {
     popupTitle: "Smart Action",
     popupSubtitle: "Bấm key đã cấu hình hoặc click vào action",
     popupFooter: "Popup-local hotkey chỉ có hiệu lực khi popup đang mở.",
+    imageActionHint: "Hỏi về ảnh trong clipboard hoặc quét ROI màn hình.",
     settingsTitle: "Cài đặt",
     settingsSubtitle: "Cấu hình chung và smart action",
     close: "Đóng",
@@ -167,6 +179,7 @@ const translations = {
     save: "Lưu",
     actionsHint: "Mỗi action có prompt, hotkey trong popup và tùy chọn trả kèm source riêng.",
     duplicateKeys: "Hotkey của smart action không được trùng nhau.",
+    reservedKeys: "Một số hotkey đã được giữ riêng cho built-in action.",
     singleKey: "Mỗi hotkey phải đúng một ký tự.",
     requiredName: "Tên action là bắt buộc.",
     requiredPrompt: "Prompt action là bắt buộc.",
@@ -179,6 +192,7 @@ const translations = {
     popupTitle: "Smart Actions",
     popupSubtitle: "按已配置按键，或点击 action",
     popupFooter: "这些 action 按键只在当前弹窗打开时生效。",
+    imageActionHint: "询问剪贴板图片，或框选屏幕区域后提问。",
     settingsTitle: "设置",
     settingsSubtitle: "通用设置与 smart action",
     close: "关闭",
@@ -211,6 +225,7 @@ const translations = {
     save: "保存",
     actionsHint: "每个 action 都有自己的 prompt、弹窗按键和返回原文选项。",
     duplicateKeys: "Smart action 按键必须唯一。",
+    reservedKeys: "有些按键已保留给内建 action。",
     singleKey: "每个按键必须是单个字符。",
     requiredName: "必须填写 action 名称。",
     requiredPrompt: "必须填写 action prompt。",
@@ -391,18 +406,27 @@ function AskUi({
 
   useEffect(() => {
     textareaRef.current?.focus()
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        window.pywebview?.api.cancelAsk()
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        window.pywebview?.api.submitAsk(prompt.trim())
-      }
+  }, [])
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault()
+      window.pywebview?.api.cancelAsk()
+      return
     }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [prompt])
+
+    const isComposing =
+      Boolean((e.nativeEvent as KeyboardEvent & { isComposing?: boolean }).isComposing)
+
+    if (isComposing) {
+      return
+    }
+
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      window.pywebview?.api.submitAsk(prompt.trim())
+    }
+  }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/95 p-4 font-sans text-slate-900 shadow-2xl backdrop-blur-md">
@@ -429,8 +453,10 @@ function AskUi({
           ref={textareaRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={handleTextareaKeyDown}
           placeholder={payload.placeholder || t.askPlaceholder}
           className="h-full min-h-36 w-full resize-none rounded-lg border-slate-200 bg-white p-3 text-sm shadow-inner focus-visible:border-teal-500 focus-visible:ring-teal-500"
+          spellCheck={false}
         />
       </div>
 
@@ -451,26 +477,30 @@ function PopupUi({
   uiLang,
   changeLang,
   actions,
+  builtinActions,
 }: {
   t: (typeof translations)["en"]
   uiLang: UiLanguage
   changeLang: (newLang: UiLanguage) => void
   actions: SmartAction[]
+  builtinActions: BuiltinAction[]
 }) {
+  const popupItems = useMemo(() => [...actions, ...builtinActions], [actions, builtinActions])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         window.pywebview?.api.cancelPopup()
         return
       }
-      const match = actions.find((action) => action.hotkey.toLowerCase() === e.key.toLowerCase())
+      const match = popupItems.find((action) => action.hotkey.toLowerCase() === e.key.toLowerCase())
       if (match) {
         window.pywebview?.api.submitPopup(match.id)
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [actions])
+  }, [popupItems])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden rounded-xl border border-slate-200/50 bg-slate-50/95 font-sans shadow-2xl backdrop-blur-md">
@@ -500,24 +530,51 @@ function PopupUi({
       </div>
 
       <div className="flex-grow overflow-y-auto px-2 py-3">
-        {actions.map((action) => (
-          <button
-            key={action.id}
-            onClick={() => window.pywebview?.api.submitPopup(action.id)}
-            className="mb-1 flex w-full items-center rounded-lg border border-transparent px-3 py-2.5 text-left transition-all hover:border-slate-200/50 hover:bg-white hover:shadow-sm"
-          >
-            <div className="mr-3 flex h-7 w-7 items-center justify-center rounded bg-white text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">
-              {action.hotkey.toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-grow">
-              <div className="truncate text-sm font-medium text-slate-800">{action.name}</div>
-              <div className="truncate text-xs text-slate-500">
-                {action.ask_before_run ? "Ask before run" : "Run directly"}
-                {action.return_with_source ? " • With source" : ""}
-              </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-slate-300" />
-          </button>
+        {popupItems.map((action) => (
+          (() => {
+            const isImageAction = "kind" in action && action.kind === "image_ask"
+            if (isImageAction) {
+              return (
+                <button
+                  key={action.id}
+                  onClick={() => window.pywebview?.api.submitPopup(action.id)}
+                  className="mb-1 flex w-full items-center rounded-lg border border-transparent px-3 py-2.5 text-left transition-all hover:border-slate-200/50 hover:bg-white hover:shadow-sm"
+                >
+                  <div className="mr-3 flex h-7 w-7 items-center justify-center rounded bg-white text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                    {action.hotkey.toUpperCase()}
+                  </div>
+                  <div className="mr-3 flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                    <Image className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-grow">
+                    <div className="truncate text-sm font-medium text-slate-800">{action.name}</div>
+                    <div className="truncate text-xs text-slate-500">{t.imageActionHint}</div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-300" />
+                </button>
+              )
+            }
+
+            return (
+              <button
+                key={action.id}
+                onClick={() => window.pywebview?.api.submitPopup(action.id)}
+                className="mb-1 flex w-full items-center rounded-lg border border-transparent px-3 py-2.5 text-left transition-all hover:border-slate-200/50 hover:bg-white hover:shadow-sm"
+              >
+                <div className="mr-3 flex h-7 w-7 items-center justify-center rounded bg-white text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                  {action.hotkey.toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-grow">
+                  <div className="truncate text-sm font-medium text-slate-800">{action.name}</div>
+                  <div className="truncate text-xs text-slate-500">
+                    {(action as SmartAction).ask_before_run ? "Ask before run" : "Run directly"}
+                    {(action as SmartAction).return_with_source ? " • With source" : ""}
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-slate-300" />
+              </button>
+            )
+          })()
         ))}
       </div>
 
@@ -640,6 +697,7 @@ function SettingsUi({
   t,
   settings,
   actions,
+  builtinActions,
   onSettingsChange,
   onActionsChange,
   onLanguageChange,
@@ -647,6 +705,7 @@ function SettingsUi({
   t: (typeof translations)["en"]
   settings: GeneralSettings
   actions: SmartAction[]
+  builtinActions: BuiltinAction[]
   onSettingsChange: React.Dispatch<React.SetStateAction<GeneralSettings>>
   onActionsChange: React.Dispatch<React.SetStateAction<SmartAction[]>>
   onLanguageChange: (newLang: UiLanguage) => void
@@ -662,6 +721,11 @@ function SettingsUi({
   const normalizedKeys = useMemo(() => actions.map((action) => action.hotkey.trim().toLowerCase()), [actions])
   const hasDuplicateKeys = normalizedKeys.length !== new Set(normalizedKeys).size
   const hasInvalidKey = normalizedKeys.some((key) => key.length !== 1)
+  const builtinHotkeys = useMemo(
+    () => builtinActions.map((action) => action.hotkey.trim().toLowerCase()),
+    [builtinActions]
+  )
+  const usesReservedKey = normalizedKeys.some((key) => builtinHotkeys.includes(key))
   const hasBlankName = actions.some((action) => !action.name.trim())
   const hasBlankPrompt = actions.some((action) => !action.prompt.trim())
 
@@ -672,6 +736,10 @@ function SettingsUi({
     }
     if (hasInvalidKey) {
       setError(t.singleKey)
+      return
+    }
+    if (usesReservedKey) {
+      setError(t.reservedKeys)
       return
     }
     if (hasBlankName) {
@@ -826,6 +894,10 @@ function SettingsUi({
               </Button>
             </div>
 
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Built-in: {builtinActions.map((action) => `${action.hotkey.toUpperCase()}=${action.name}`).join(", ")}
+            </div>
+
             <div className="space-y-2">
               {actions.map((action, index) => (
                 <div key={action.id} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
@@ -897,6 +969,7 @@ export default function App() {
   const [lang, setLang] = useState<UiLanguage>("en")
   const [settings, setSettings] = useState<GeneralSettings>(defaultSettings)
   const [actions, setActions] = useState<SmartAction[]>([])
+  const [builtinActions, setBuiltinActions] = useState<BuiltinAction[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
 
@@ -917,6 +990,7 @@ export default function App() {
         if (snapshot && mounted) {
           setSettings({ ...defaultSettings, ...snapshot.settings })
           setActions(snapshot.smart_actions || [])
+          setBuiltinActions(snapshot.builtin_actions || [])
           setLang((snapshot.settings?.UI_LANGUAGE || "en") as UiLanguage)
         }
       } catch {
@@ -956,7 +1030,7 @@ export default function App() {
   }
 
   if (page === "popup") {
-    return <PopupUi t={t} uiLang={lang} changeLang={changeLang} actions={actions} />
+    return <PopupUi t={t} uiLang={lang} changeLang={changeLang} actions={actions} builtinActions={builtinActions} />
   }
 
   if (page === "settings") {
@@ -965,6 +1039,7 @@ export default function App() {
         t={t}
         settings={settings}
         actions={actions}
+        builtinActions={builtinActions}
         onSettingsChange={setSettings}
         onActionsChange={setActions}
         onLanguageChange={changeLang}

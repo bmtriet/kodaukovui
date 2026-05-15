@@ -1,5 +1,7 @@
 import unittest
 
+from PIL import Image
+
 from platform_adapter import LinuxPlatformAdapter, WindowsPlatformAdapter
 
 
@@ -26,6 +28,17 @@ class PlatformAdapterTests(unittest.TestCase):
         message = adapter._ensure_can_interact(12345, "đọc văn bản từ ứng dụng đích")
 
         self.assertIsNone(message)
+
+    def test_clipboard_image_payload_shape(self):
+        adapter = LinuxPlatformAdapter(controller=None)
+        image = Image.new("RGB", (12, 8), color="red")
+
+        payload = adapter._image_to_payload(image, source="clipboard_image")
+
+        self.assertEqual(payload["source"], "clipboard_image")
+        self.assertEqual(payload["mime_type"], "image/png")
+        self.assertEqual(payload["size"], {"width": 12, "height": 8})
+        self.assertTrue(payload["image_bytes"])
 
 
 if __name__ == "__main__":

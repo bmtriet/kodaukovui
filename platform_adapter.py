@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import subprocess
@@ -5,6 +6,7 @@ import time
 from ctypes import Structure, byref, c_bool, c_long, c_ulong, c_void_p, sizeof
 
 import pyperclip
+from PIL import Image, ImageGrab
 try:
     from pynput import keyboard
 except ModuleNotFoundError:
@@ -44,6 +46,17 @@ class PlatformAdapter:
 
     def get_selected_text(self, target_window_id=None):
         return self._copy_selected_text()
+
+    def get_clipboard_image(self):
+        try:
+            image = ImageGrab.grabclipboard()
+        except Exception:
+            image = None
+
+        if isinstance(image, Image.Image):
+            return self._image_to_payload(image, source="clipboard_image"), None
+
+        return None, None
 
     def prepare_add_marks_placeholder(self, target_window_id=None):
         error = self._ensure_can_interact(target_window_id, "ghi vào ứng dụng đích")
@@ -110,6 +123,22 @@ class PlatformAdapter:
         self.controller.release(char)
         self.controller.release(keyboard.Key.ctrl)
 
+    def _image_to_payload(self, image: Image.Image, source: str, region: dict | None = None):
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        return {
+            "source": source,
+            "mime_type": "image/png",
+            "image_bytes": output.getvalue(),
+            "size": {"width": image.width, "height": image.height},
+            "region": region,
+        }
+
+    def _bytes_to_payload(self, raw: bytes, source: str, region: dict | None = None):
+        image = Image.open(io.BytesIO(raw))
+        image.load()
+        return self._image_to_payload(image, source=source, region=region)
+
     def _select_placeholder(self):
         self.controller.press(keyboard.Key.shift)
         for _ in range(3):
@@ -161,6 +190,27 @@ class LinuxPlatformAdapter(PlatformAdapter):
         except Exception:
             pass
         return super().get_selected_text(target_window_id=target_window_id)
+
+    def get_clipboard_image(self):
+        try:
+            targets = subprocess.run(
+                ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if targets.returncode == 0 and "image/png" in targets.stdout:
+                raw = subprocess.run(
+                    ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"],
+                    capture_output=True,
+                    timeout=2,
+                )
+                if raw.returncode == 0 and raw.stdout:
+                    return self._bytes_to_payload(raw.stdout, source="clipboard_image"), None
+        except Exception:
+            pass
+
+        return super().get_clipboard_image()
 
 
 if os.name == "nt":

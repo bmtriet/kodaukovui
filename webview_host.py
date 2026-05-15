@@ -98,7 +98,7 @@ def run_webview_host(page="ask", ui_lang="en", payload=None):
     url = f"file://{html_path}?{urllib.parse.urlencode(query)}"
 
     if page == "ask":
-        width, height, title = 620, 280, "KoDauKoVui"
+        width, height, title = 620, 320, "KoDauKoVui"
     elif page == "settings":
         width, height, title = 980, 780, "KoDauKoVui Settings"
     else:
@@ -113,31 +113,35 @@ def run_webview_host(page="ask", ui_lang="en", payload=None):
                 active_screen = s
                 break
 
-    if active_screen:
-        webview.create_window(
-            title,
-            url,
-            js_api=api,
-            width=width,
-            height=height,
-            resizable=False,
-            frameless=True,
-            transparent=True,
-            easy_drag=False,
-            screen=active_screen,
+    window_options = {
+        "width": width,
+        "height": height,
+        "resizable": False,
+        "screen": active_screen,
+    }
+
+    if page == "ask":
+        window_options.update(
+            {
+                "frameless": False,
+                "transparent": False,
+                "easy_drag": True,
+            }
         )
     else:
-        webview.create_window(
-            title,
-            url,
-            js_api=api,
-            width=width,
-            height=height,
-            resizable=False,
-            frameless=True,
-            transparent=True,
-            easy_drag=False,
+        window_options.update(
+            {
+                "frameless": True,
+                "transparent": True,
+                "easy_drag": False,
+            }
         )
+
+    if active_screen:
+        webview.create_window(title, url, js_api=api, **window_options)
+    else:
+        window_options.pop("screen", None)
+        webview.create_window(title, url, js_api=api, **window_options)
 
     webview.start()
 

@@ -1,8 +1,11 @@
+import base64
 import json
 import subprocess
 import sys
 import threading
 import time
+import tkinter as tk
+from tkinter import messagebox
 from pathlib import Path
 
 from google import genai
@@ -11,7 +14,7 @@ from pynput import keyboard
 
 from app_paths import get_resource_path, get_user_data_path
 from platform_adapter import create_platform_adapter
-from settings_store import load_settings, load_smart_actions
+from settings_store import BUILTIN_POPUP_ACTIONS, load_settings, load_smart_actions
 
 
 BUNDLE_DIR = get_resource_path()
@@ -21,6 +24,7 @@ HISTORY_FILE = Path(get_user_data_path("history.json"))
 LEARNED_FILE = Path(get_user_data_path("learned.json"))
 HISTORY_LIMIT = 1000
 SOURCE_SEPARATOR = "\n\n---\nSource:\n"
+IMAGE_ASK_ID = "image_ask"
 
 client = None
 openai_client = None
@@ -109,7 +113,7 @@ def load_brain_context():
     return ""
 
 
-def build_prompt(selected_text: str, action: dict, extra_instruction: str = "") -> str:
+def build_text_prompt(selected_text: str, action: dict, extra_instruction: str = "") -> str:
     sections = []
     brain_ctx = load_brain_context().strip()
     if brain_ctx:
@@ -118,13 +122,34 @@ def build_prompt(selected_text: str, action: dict, extra_instruction: str = "") 
     sections.append(action["prompt"].strip())
 
     if extra_instruction.strip():
-        sections.append(f"[ADDITIONAL USER INSTRUCTION]\n{extra_instruction.strip()}\n[END ADDITIONAL USER INSTRUCTION]")
+        sections.append(
+            f"[ADDITIONAL USER INSTRUCTION]\n{extra_instruction.strip()}\n[END ADDITIONAL USER INSTRUCTION]"
+        )
 
     sections.append(
         "Hãy làm theo đúng hướng dẫn ở trên. Nếu không có yêu cầu khác trong prompt, chỉ trả về kết quả cuối cùng."
     )
     sections.append(f"[SELECTED TEXT]\n{selected_text}\n[END SELECTED TEXT]")
     return "\n\n".join(section for section in sections if section)
+
+
+def build_image_question_prompt(question: str) -> str:
+    sections = []
+    brain_ctx = load_brain_context().strip()
+    if brain_ctx:
+        sections.append(brain_ctx)
+    sections.append(
+        "Bạn là trợ lý AI phân tích hình ảnh. Hãy trả lời câu hỏi của người dùng dựa trên ảnh được cung cấp."
+    )
+    sections.append(f"[USER QUESTION]\n{question.strip()}\n[END USER QUESTION]")
+    return "\n\n".join(section for section in sections if section)
+
+
+def build_aux_command(flag: str, *args: str):
+    if getattr(sys, "frozen", False):
+        return [sys.executable, flag, *args]
+    script_path = BUNDLE_DIR / "roi_capture.py"
+    return [sys.executable, str(script_path), *args]
 
 
 def build_webview_command(page: str, ui_lang: str, payload: dict | None = None):
@@ -157,7 +182,11 @@ def apply_runtime_settings(settings: dict, smart_actions: list[dict]):
 def initialize_ai_clients(require_api_key: bool = False) -> bool:
     global client, openai_client
 
-    client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_token_here" else None
+    client = (
+        genai.Client(api_key=GEMINI_API_KEY)
+        if GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_token_here"
+        else None
+    )
     openai_client = (
         openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
         if OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here"
@@ -200,6 +229,41 @@ def run_webview_page(page: str, ui_lang: str, payload: dict | None = None):
         return output
 
 
+def run_roi_capture():
+    result = subprocess.run(
+        build_aux_command("--roi-capture"),
+        capture_output=True,
+        text=True,
+    )
+    if result.stderr.strip():
+        print(f"[ROI] {result.stderr.strip()}")
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        data = json.loads(result.stdout.strip())
+    except json.JSONDecodeError:
+        return None
+
+    image_base64 = data.get("image_base64")
+    if not image_base64:
+        return None
+
+    return {
+        "source": data.get("source", "roi_screenshot"),
+        "mime_type": data.get("mime_type", "image/png"),
+        "image_bytes": base64.b64decode(image_base64),
+        "size": data.get("size"),
+        "region": data.get("region"),
+    }
+
+
+def get_builtin_action_by_id(action_id: str):
+    for action in BUILTIN_POPUP_ACTIONS:
+        if action["id"] == action_id:
+            return action
+    return None
+
+
 def find_action_by_id(action_id: str):
     for action in SMART_ACTIONS:
         if action["id"] == action_id:
@@ -207,13 +271,13 @@ def find_action_by_id(action_id: str):
     return None
 
 
-def show_ask_window(action: dict):
+def show_ask_window(title: str, placeholder: str):
     data = run_webview_page(
         "ask",
         UI_LANGUAGE,
         {
-            "title": action["name"],
-            "placeholder": "Nhập yêu cầu bổ sung cho action này...",
+            "title": title,
+            "placeholder": placeholder,
         },
     )
     if isinstance(data, dict):
@@ -221,7 +285,7 @@ def show_ask_window(action: dict):
     return None
 
 
-def call_ai(prompt: str) -> str:
+def call_ai_with_text(prompt: str) -> str:
     if AI_PROVIDER == "openai" and openai_client:
         response = openai_client.chat.completions.create(
             model=OPENAI_MODEL,
@@ -239,7 +303,84 @@ def call_ai(prompt: str) -> str:
     raise RuntimeError("Chưa cấu hình AI provider/API key. Mở popup rồi bấm gear để vào Settings.")
 
 
-def on_activate(action_id, pre_selected_text=None, target_window_id=None):
+def call_ai_with_image(question: str, image_payload: dict) -> str:
+    prompt = build_image_question_prompt(question)
+
+    if AI_PROVIDER == "openai" and openai_client:
+        data_url = (
+            f"data:{image_payload['mime_type']};base64,"
+            f"{base64.b64encode(image_payload['image_bytes']).decode('ascii')}"
+        )
+        response = openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+        )
+        return response.choices[0].message.content.strip()
+
+    if client:
+        image_part = genai.types.Part.from_bytes(
+            data=image_payload["image_bytes"],
+            mime_type=image_payload["mime_type"],
+        )
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[image_part, prompt],
+        )
+        return response.text.strip()
+
+    raise RuntimeError("Chưa cấu hình AI provider/API key. Mở popup rồi bấm gear để vào Settings.")
+
+
+def capture_image_context():
+    clipboard_payload, clipboard_error = PLATFORM.get_clipboard_image()
+    if clipboard_error:
+        return None, clipboard_error
+
+    if clipboard_payload:
+        source_choice = choose_image_source()
+        if source_choice == "clipboard":
+            return clipboard_payload, None
+        if source_choice == "roi":
+            roi_payload = run_roi_capture()
+            if roi_payload:
+                return roi_payload, None
+            return None, "[HỦY] Người dùng đã hủy ROI capture."
+        return None, "[HỦY] Người dùng đã hủy chọn nguồn ảnh."
+
+    roi_payload = run_roi_capture()
+    if roi_payload:
+        return roi_payload, None
+
+    return None, "[HỦY] Không có ảnh clipboard và người dùng đã hủy ROI capture."
+
+
+def choose_image_source():
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    root.update_idletasks()
+    result = messagebox.askyesnocancel(
+        "Ask by Image",
+        "Clipboard đang có ảnh.\n\nYes: dùng ảnh clipboard\nNo: vẽ ROI trên màn hình\nCancel: hủy",
+        parent=root,
+    )
+    root.destroy()
+    if result is True:
+        return "clipboard"
+    if result is False:
+        return "roi"
+    return None
+
+
+def on_text_action_activate(action_id, pre_selected_text=None, target_window_id=None):
     global is_processing
     if is_processing:
         return
@@ -269,13 +410,16 @@ def on_activate(action_id, pre_selected_text=None, target_window_id=None):
 
         extra_instruction = ""
         if action.get("ask_before_run"):
-            extra_instruction = show_ask_window(action)
+            extra_instruction = show_ask_window(
+                action["name"],
+                "Nhập yêu cầu bổ sung cho action này...",
+            )
             if extra_instruction is None:
                 print(f"[HỦY] Đã hủy smart action: {action['name']}.")
                 return
 
-        prompt = build_prompt(selected_text, action, extra_instruction)
-        result_text = call_ai(prompt)
+        prompt = build_text_prompt(selected_text, action, extra_instruction)
+        result_text = call_ai_with_text(prompt)
 
         if DEBUG:
             print(f"[DEBUG] Văn bản kết quả: {result_text}")
@@ -299,6 +443,63 @@ def on_activate(action_id, pre_selected_text=None, target_window_id=None):
         print(f"[THÀNH CÔNG] Đã hoàn tất {action['name']}!")
     except Exception as ex:
         print(f"\n[LỖI NGHIÊM TRỌNG] Đã xảy ra lỗi trong quá trình xử lý hotkey: {ex}")
+    finally:
+        is_processing = False
+
+
+def on_image_action_activate(target_window_id=None):
+    global is_processing
+    if is_processing:
+        return
+    is_processing = True
+
+    try:
+        builtin_action = get_builtin_action_by_id(IMAGE_ASK_ID)
+        print(f"\n[HOTKEY] Đang xử lý built-in action: {builtin_action['name']}...")
+
+        image_payload, image_error = capture_image_context()
+        if image_error:
+            print(image_error)
+            return
+        if not image_payload:
+            print("[LỖI] Không lấy được image context.")
+            return
+
+        if DEBUG:
+            print(
+                f"[DEBUG] Image source: {image_payload['source']}, "
+                f"size={image_payload.get('size')}, region={image_payload.get('region')}"
+            )
+
+        question = show_ask_window(
+            builtin_action["name"],
+            "Nhập câu hỏi cho hình ảnh này...",
+        )
+        if question is None or not question.strip():
+            print("[HỦY] Đã hủy action hỏi bằng hình ảnh.")
+            return
+
+        result_text = call_ai_with_image(question.strip(), image_payload)
+
+        if DEBUG:
+            print(f"[DEBUG] Văn bản kết quả từ image action: {result_text}")
+
+        if target_window_id:
+            PLATFORM.restore_focus(target_window_id)
+
+        paste_error = PLATFORM.paste_processed_text(
+            result_text,
+            action_type="smart_action",
+            target_window_id=target_window_id,
+        )
+        if paste_error:
+            print(paste_error)
+            return
+
+        save_history(f"[image:{image_payload['source']}] {question.strip()}", result_text, user_edit=False)
+        print(f"[THÀNH CÔNG] Đã hoàn tất {builtin_action['name']}!")
+    except Exception as ex:
+        print(f"\n[LỖI NGHIÊM TRỌNG] Đã xảy ra lỗi trong quá trình xử lý image action: {ex}")
     finally:
         is_processing = False
 
@@ -334,6 +535,11 @@ def show_popup_menu():
             is_processing = False
             return
 
+        if choice == IMAGE_ASK_ID:
+            is_processing = False
+            threading.Thread(target=on_image_action_activate, args=(target_window_id,), daemon=True).start()
+            return
+
         selected_text, selection_error = PLATFORM.get_selected_text(target_window_id=target_window_id)
         if selection_error:
             print(selection_error)
@@ -345,7 +551,11 @@ def show_popup_menu():
             return
 
         is_processing = False
-        threading.Thread(target=on_activate, args=(choice, selected_text, target_window_id), daemon=True).start()
+        threading.Thread(
+            target=on_text_action_activate,
+            args=(choice, selected_text, target_window_id),
+            daemon=True,
+        ).start()
     except Exception as e:
         print(f"Lỗi popup: {e}")
         is_processing = False
@@ -391,7 +601,10 @@ HOTKEY_MANAGER = HotkeyListenerManager()
 
 
 def print_startup_banner():
-    popup_summary = ", ".join(f"{action['hotkey']}={action['name']}" for action in SMART_ACTIONS)
+    text_actions_summary = ", ".join(f"{action['hotkey']}={action['name']}" for action in SMART_ACTIONS)
+    builtin_summary = ", ".join(f"{action['hotkey']}={action['name']}" for action in BUILTIN_POPUP_ACTIONS)
+    popup_summary = ", ".join(part for part in [text_actions_summary, builtin_summary] if part)
+
     print("=" * 60)
     print("KoDauKoVui background service started")
     print(f"Provider       : {AI_PROVIDER}")
@@ -430,6 +643,11 @@ def main():
                 except json.JSONDecodeError:
                     payload = None
             run_webview_host(page=page, ui_lang=ui_lang, payload=payload)
+            return
+        if sys.argv[1] == "--roi-capture":
+            from roi_capture import run_roi_capture
+
+            run_roi_capture()
             return
 
     reload_runtime_settings(rebuild_listener=False)
