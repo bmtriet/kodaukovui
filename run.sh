@@ -1,25 +1,48 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Navigate to script directory just in case it's called from outside
 cd "$(dirname "$0")"
 
+OS_NAME="$(uname -s)"
+
+choose_python() {
+    for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            "$candidate" - <<'PY'
+import sys
+raise SystemExit(0 if (3, 10) <= sys.version_info[:2] < (3, 14) else 1)
+PY
+            if [ "$?" -eq 0 ]; then
+                command -v "$candidate"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
 cleanup_stuck_processes() {
     local repo_dir
+    local stale_pids
     repo_dir="$(pwd)"
 
-    mapfile -t stale_pids < <(
-        pgrep -af "python.*(main\.py|webview_host\.py|roi_capture\.py)" | while read -r pid cmd; do
-            if [[ "$cmd" == *"$repo_dir"* ]]; then
-                echo "$pid"
-            fi
+    stale_pids="$(
+        ps -axo pid=,command= | while read -r pid cmd; do
+            case "$cmd" in
+                *"$repo_dir"*)
+                    case "$cmd" in
+                        *python*"main.py"*|*python*"webview_host.py"*|*python*"roi_capture.py"*) echo "$pid" ;;
+                    esac
+                    ;;
+            esac
         done
-    )
+    )"
 
-    if [ "${#stale_pids[@]}" -gt 0 ]; then
-        echo "Killing stuck KoDauKoVui processes: ${stale_pids[*]}"
-        kill "${stale_pids[@]}" 2>/dev/null || true
+    if [ -n "$stale_pids" ]; then
+        echo "Killing stuck KoDauKoVui processes: $stale_pids"
+        echo "$stale_pids" | xargs kill 2>/dev/null || true
         sleep 1
-        for pid in "${stale_pids[@]}"; do
+        for pid in $stale_pids; do
             if kill -0 "$pid" 2>/dev/null; then
                 kill -9 "$pid" 2>/dev/null || true
             fi
@@ -27,16 +50,27 @@ cleanup_stuck_processes() {
     fi
 }
 
-if [ ! -f "webui/dist/index.html" ]; then
-    echo "Missing webui/dist/index.html. Please build the React UI first with:"
-    echo "  cd webui && npm install && npm run build"
+PYTHON_BIN="$(choose_python)"
+if [ -z "$PYTHON_BIN" ]; then
+    echo "[ERROR] KoDauKoVui needs Python 3.10-3.13."
+    echo "On macOS, install one with: brew install python@3.12"
     exit 1
+fi
+
+if [ ! -d "webui/node_modules" ]; then
+    echo "Installing React UI dependencies..."
+    (cd webui && npm install)
+fi
+
+if [ ! -f "webui/dist/index.html" ]; then
+    echo "Building React UI..."
+    (cd webui && npm run build)
 fi
 
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment 'venv'..."
-    python3 -m venv --system-site-packages venv
+    "$PYTHON_BIN" -m venv --system-site-packages venv
 fi
 
 # Activate virtual environment
@@ -47,7 +81,7 @@ source venv/bin/activate
 echo "Checking and installing dependencies..."
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet -r requirements.txt
-if [ -f "requirements-linux.txt" ]; then
+if [ "$OS_NAME" = "Linux" ] && [ -f "requirements-linux.txt" ]; then
     python -m pip install --quiet -r requirements-linux.txt
 fi
 
@@ -55,20 +89,31 @@ cleanup_stuck_processes
 
 # Set IME environment variables before launching Python
 # This ensures the broker subprocess inherits the correct fcitx5 config
-if command -v fcitx5-remote &>/dev/null || command -v fcitx-remote &>/dev/null; then
-    export QT_IM_MODULE=fcitx
-    export GTK_IM_MODULE=fcitx
-    export XMODIFIERS="@im=fcitx"
-else
-    export QT_IM_MODULE=ibus
-    export GTK_IM_MODULE=ibus
-    export XMODIFIERS="@im=ibus"
-fi
+if [ "$OS_NAME" = "Linux" ]; then
+    if command -v fcitx5-remote &>/dev/null || command -v fcitx-remote &>/dev/null; then
+        export QT_IM_MODULE=fcitx
+        export GTK_IM_MODULE=fcitx
+        export XMODIFIERS="@im=fcitx"
+    else
+        export QT_IM_MODULE=ibus
+        export GTK_IM_MODULE=ibus
+        export XMODIFIERS="@im=ibus"
+    fi
 
-# Point Qt to the venv's PyQt5 plugin directory (contains fcitx5 input context plugin)
-VENV_QT_PLUGINS="$(pwd)/venv/lib/python3.10/site-packages/PyQt5/Qt5/plugins"
-if [ -d "$VENV_QT_PLUGINS" ]; then
-    export QT_PLUGIN_PATH="$VENV_QT_PLUGINS${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+    # Point Qt to the venv's PyQt5 plugin directory (contains fcitx5 input context plugin)
+    VENV_QT_PLUGINS="$(python - <<'PY'
+import site
+from pathlib import Path
+for base in site.getsitepackages():
+    plugins = Path(base) / "PyQt5" / "Qt5" / "plugins"
+    if plugins.exists():
+        print(plugins)
+        break
+PY
+)"
+    if [ -n "$VENV_QT_PLUGINS" ]; then
+        export QT_PLUGIN_PATH="$VENV_QT_PLUGINS${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+    fi
 fi
 
 # Run the application

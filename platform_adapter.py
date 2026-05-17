@@ -2,6 +2,7 @@ import io
 import os
 import re
 import subprocess
+import sys
 import time
 from ctypes import Structure, byref, c_bool, c_long, c_ulong, c_void_p, sizeof
 
@@ -213,6 +214,51 @@ class LinuxPlatformAdapter(PlatformAdapter):
         return super().get_clipboard_image()
 
 
+class MacOSPlatformAdapter(PlatformAdapter):
+    def normalize_hotkey(self, hotkey: str) -> str:
+        if hotkey.startswith("<ctrl>+"):
+            return hotkey.replace("<ctrl>+", "<cmd>+", 1)
+        return hotkey
+
+    def get_current_active_window(self):
+        try:
+            result = subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    'tell application "System Events" to get bundle identifier of first application process whose frontmost is true',
+                ],
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return None
+
+    def restore_focus(self, window_id):
+        if not window_id:
+            return
+        try:
+            subprocess.run(
+                ["osascript", "-e", f'tell application id "{window_id}" to activate'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=1,
+            )
+            time.sleep(0.2)
+        except Exception:
+            pass
+
+    def _press_ctrl_char(self, char: str):
+        self.controller.press(keyboard.Key.cmd)
+        self.controller.press(char)
+        self.controller.release(char)
+        self.controller.release(keyboard.Key.cmd)
+
+
 if os.name == "nt":
     class POINT(Structure):
         _fields_ = [("x", c_long), ("y", c_long)]
@@ -307,4 +353,6 @@ class WindowsPlatformAdapter(PlatformAdapter):
 def create_platform_adapter(controller, debug: bool = False) -> PlatformAdapter:
     if os.name == "nt":
         return WindowsPlatformAdapter(controller, debug=debug)
+    if sys.platform == "darwin":
+        return MacOSPlatformAdapter(controller, debug=debug)
     return LinuxPlatformAdapter(controller, debug=debug)

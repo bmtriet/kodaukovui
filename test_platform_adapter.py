@@ -2,13 +2,21 @@ import unittest
 
 from PIL import Image
 
-from platform_adapter import LinuxPlatformAdapter, WindowsPlatformAdapter
+from platform_adapter import LinuxPlatformAdapter, MacOSPlatformAdapter, WindowsPlatformAdapter
 
 
 class PlatformAdapterTests(unittest.TestCase):
     def test_linux_popup_hotkey_normalization(self):
         adapter = LinuxPlatformAdapter(controller=None)
         self.assertEqual(adapter.normalize_hotkey("<ctrl>+/"), "<ctrl>+/")
+
+    def test_macos_popup_hotkey_normalization_uses_command(self):
+        adapter = MacOSPlatformAdapter(controller=None)
+        self.assertEqual(adapter.normalize_hotkey("<ctrl>+'"), "<cmd>+'")
+
+    def test_macos_keeps_explicit_command_hotkey(self):
+        adapter = MacOSPlatformAdapter(controller=None)
+        self.assertEqual(adapter.normalize_hotkey("<cmd>+space"), "<cmd>+space")
 
     def test_windows_blocks_cross_privilege_interaction(self):
         adapter = WindowsPlatformAdapter(controller=None)

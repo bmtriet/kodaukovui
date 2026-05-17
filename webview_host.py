@@ -33,7 +33,7 @@ def _get_pyqt5_plugin_path() -> str | None:
 
 
 def _preconfigure_linux_input_method_env() -> None:
-    if os.name == "nt":
+    if not sys.platform.startswith("linux"):
         return
 
     preferred_module = _resolve_linux_ime_module()
@@ -612,7 +612,7 @@ def create_broker_windows(state: BrokerState):
 
 def run_webview_broker():
     settings = load_current_settings()
-    if os.name != "nt":
+    if sys.platform.startswith("linux"):
         configure_linux_input_method(settings.get("DEBUG", False))
     state = BrokerState(debug=settings.get("DEBUG", False))
     create_broker_windows(state)
@@ -621,7 +621,7 @@ def run_webview_broker():
 
 def run_webview_host(page="ask", ui_lang="en", payload=None):
     settings = load_current_settings()
-    if os.name != "nt":
+    if sys.platform.startswith("linux"):
         configure_linux_input_method(settings.get("DEBUG", False))
 
     platform_adapter = create_platform_adapter(controller=None, debug=settings.get("DEBUG", False))

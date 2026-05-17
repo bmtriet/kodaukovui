@@ -22,8 +22,9 @@
 ## Yêu cầu hệ thống
 - Python 3.10-3.13
 - Node.js và npm
-- Linux (X11) hoặc Windows
+- Linux (X11), macOS hoặc Windows
 - Linux cần `xclip`; nếu muốn restore focus và popup theo vị trí chuột thì cần `xdotool`
+- macOS cần cấp quyền Accessibility cho Terminal/app chạy KoDauKoVui để global hotkey, copy/paste và auto-paste hoạt động
 - Windows hiện nên tránh Python 3.14 vì `pywebview` kéo `pythonnet`, và `pythonnet` hiện hỗ trợ `Python < 3.14`
 
 ## Cài đặt và chạy
@@ -33,6 +34,14 @@
 chmod +x run.sh
 ./run.sh
 ```
+
+### macOS
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+Lần đầu chạy trên macOS, vào **System Settings → Privacy & Security → Accessibility** và bật quyền cho Terminal/iTerm hoặc app packaged. Hotkey popup mặc định `<ctrl>+'` sẽ được tự map thành `<cmd>+'` trên macOS.
 
 ### Chạy tay
 ```bash
@@ -82,6 +91,7 @@ Hai built-in action không bị xóa, nhưng hotkey của chúng có thể đổ
 Artifact:
 - Windows: `dist/KoDauKoVui/KoDauKoVui.exe` và `dist/KoDauKoVui-windows-x64.zip`
 - Linux: `dist/kodaukovui/kodaukovui` và `dist/KoDauKoVui-linux-x64.tar.gz`
+- macOS: hiện chạy bằng source qua `run.sh`; packaging `.app`/`.dmg` sẽ cần bổ sung script build riêng
 
 Bundle packaged app sẽ mang theo:
 - `webui/dist/`
