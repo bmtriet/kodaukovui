@@ -7,6 +7,7 @@ from roi_capture import (
     ensure_screen_capture_permission,
     ensure_tk_runtime,
     get_monitor_for_point,
+    get_macos_permission_app_path,
     is_probably_permission_black_frame,
     parse_xrandr_listmonitors,
 )
@@ -81,6 +82,19 @@ class RoiCaptureTests(unittest.TestCase):
         image = Image.new("RGB", (20, 20), color=(20, 20, 20))
         with patch("roi_capture.sys.platform", "darwin"):
             self.assertFalse(is_probably_permission_black_frame(image))
+
+    def test_macos_permission_app_path_resolves_framework_python_app(self):
+        executable = (
+            "/opt/homebrew/Cellar/python@3.12/3.12.13_2/Frameworks/Python.framework/"
+            "Versions/3.12/bin/python3.12"
+        )
+        expected = (
+            "/opt/homebrew/Cellar/python@3.12/3.12.13_2/Frameworks/Python.framework/"
+            "Versions/3.12/Resources/Python.app"
+        )
+
+        with patch("roi_capture.sys.executable", executable), patch("roi_capture.os.path.isdir", lambda path: True):
+            self.assertEqual(get_macos_permission_app_path(), expected)
 
 
 if __name__ == "__main__":

@@ -227,10 +227,32 @@ def capture_monitor_screenshot(monitor):
             file=sys.stderr,
             flush=True,
         )
+        app_path = get_macos_permission_app_path()
+        if app_path:
+            print(
+                f"[MACOS] Nếu app chưa có trong danh sách, bấm + và thêm: {app_path}",
+                file=sys.stderr,
+                flush=True,
+            )
         open_screen_recording_settings()
         return None
 
     return screenshot
+
+
+def get_macos_permission_app_path():
+    executable = os.path.realpath(sys.executable)
+    app_marker = ".app/Contents/MacOS/"
+    if app_marker in executable:
+        return executable.split(app_marker, 1)[0] + ".app"
+
+    match = re.search(r"(.*/Python\.framework/Versions/[^/]+)/bin/python[^/]*$", executable)
+    if match:
+        candidate = os.path.join(match.group(1), "Resources", "Python.app")
+        if os.path.isdir(candidate):
+            return candidate
+
+    return executable
 
 
 def capture_macos_screenshot(monitor):
