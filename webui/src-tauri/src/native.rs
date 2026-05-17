@@ -35,6 +35,19 @@ pub fn active_window_id() -> Option<String> {
             }
         }
     }
+    #[cfg(target_os = "linux")]
+    {
+        let output = Command::new("xdotool")
+            .arg("getactivewindow")
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !value.is_empty() {
+                return Some(value);
+            }
+        }
+    }
     None
 }
 
@@ -46,6 +59,13 @@ pub fn restore_focus(window_id: Option<&str>) {
                 "-e",
                 &format!("tell application id \"{}\" to activate", window_id.replace('"', "")),
             ])
+            .status();
+        thread::sleep(Duration::from_millis(180));
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(window_id) = window_id.filter(|id| !id.trim().is_empty()) {
+        let _ = Command::new("xdotool")
+            .args(["windowactivate", window_id])
             .status();
         thread::sleep(Duration::from_millis(180));
     }
@@ -132,10 +152,73 @@ pub fn capture_roi() -> Result<ImagePayload, NativeError> {
         return image_from_bytes("roi_screenshot", bytes, None).map_err(NativeError::Message);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        let mut path = std::env::temp_dir();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        path.push(format!("kodaukovui-roi-{nonce}.png"));
+
+        if command_exists("gnome-screenshot") {
+            let status = Command::new("gnome-screenshot")
+                .args(["-a", "-f"])
+                .arg(&path)
+                .status()?;
+            if status.success() && path.exists() {
+                let bytes = fs::read(&path)?;
+                let _ = fs::remove_file(&path);
+                return image_from_bytes("roi_screenshot", bytes, None).map_err(NativeError::Message);
+            }
+        }
+
+        if command_exists("flameshot") {
+            let output = Command::new("flameshot").args(["gui", "-r"]).output()?;
+            if output.status.success() && !output.stdout.is_empty() {
+                return image_from_bytes("roi_screenshot", output.stdout, None)
+                    .map_err(NativeError::Message);
+            }
+        }
+
+        if command_exists("grim") && command_exists("slurp") {
+            let selection = Command::new("slurp").output()?;
+            if selection.status.success() {
+                let geometry = String::from_utf8_lossy(&selection.stdout).trim().to_string();
+                if !geometry.is_empty() {
+                    let status = Command::new("grim")
+                        .args(["-g", &geometry])
+                        .arg(&path)
+                        .status()?;
+                    if status.success() && path.exists() {
+                        let bytes = fs::read(&path)?;
+                        let _ = fs::remove_file(&path);
+                        return image_from_bytes("roi_screenshot", bytes, None)
+                            .map_err(NativeError::Message);
+                    }
+                }
+            }
+        }
+
+        if command_exists("scrot") {
+            let status = Command::new("scrot").arg("-s").arg(&path).status()?;
+            if status.success() && path.exists() {
+                let bytes = fs::read(&path)?;
+                let _ = fs::remove_file(&path);
+                return image_from_bytes("roi_screenshot", bytes, None).map_err(NativeError::Message);
+            }
+        }
+
+        Err(NativeError::Message(
+            "Linux ROI capture needs one of: gnome-screenshot, flameshot, grim+slurp, or scrot."
+                .to_string(),
+        ))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Err(NativeError::Message(
-            "ROI capture is currently implemented for macOS first.".to_string(),
+            "ROI capture is not implemented for this platform.".to_string(),
         ))
     }
 }
@@ -177,6 +260,15 @@ fn restore_clipboard_text(text: &str) {
     if let Ok(mut clipboard) = Clipboard::new() {
         let _ = clipboard.set_text(text.to_string());
     }
+}
+
+#[cfg(target_os = "linux")]
+fn command_exists(name: &str) -> bool {
+    Command::new("which")
+        .arg(name)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
 
 fn press_copy_shortcut() -> Result<(), NativeError> {

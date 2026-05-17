@@ -33,6 +33,33 @@ cd webui
 npm run tauri:build
 ```
 
+## Ubuntu/Linux prerequisites
+Tauri v2 cần WebKitGTK 4.1 và các gói build GTK trên Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y \
+  libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libxdo-dev \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  xdotool \
+  gnome-screenshot
+```
+
+Khuyến nghị chạy bằng **Ubuntu on Xorg** thay vì Wayland nếu cần copy selected text và pasteback ổn định, vì app dùng `xdotool` để gửi `Ctrl+C`/`Ctrl+V` và restore cửa sổ đích.
+
+`Ask by Image` trên Linux cần một trong các tool capture vùng màn hình sau:
+- `gnome-screenshot` khuyến nghị cho Ubuntu GNOME.
+- `flameshot`.
+- `grim` + `slurp` cho Wayland/sway/wlroots.
+- `scrot` cho X11.
+
 ## macOS permissions
 - Accessibility: cần cho copy selected text và pasteback bằng phím tắt hệ thống.
 - Screen Recording: cần cho `Ask by Image` khi chọn vùng màn hình.
