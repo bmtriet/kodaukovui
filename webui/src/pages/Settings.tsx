@@ -151,15 +151,24 @@ export function SettingsPage({
           <Button variant="outline" size="sm" onClick={() => window.desktopApi?.closeSettings(false)}>
             {t.close}
           </Button>
-          <Button size="sm" onClick={saveAll} disabled={saving}>
+          <Button size="sm" onClick={saveAll} disabled={saving} className="bg-teal-600 text-white hover:bg-teal-700">
             <Save className="mr-1.5 h-3.5 w-3.5" />
             {t.saveAll}
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5">
-        <div className="mx-auto max-w-6xl space-y-4">
+      <div className="flex-1 overflow-y-auto p-5 pb-24">
+        <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[220px_1fr]">
+          <aside className="hidden self-start rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm lg:block">
+            <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.settingsTitle}</div>
+            {[t.general, t.provider, t.builtins, t.smartActions].map((item) => (
+              <div key={item} className="rounded-md px-2 py-2 text-slate-600">
+                {item}
+              </div>
+            ))}
+          </aside>
+          <div className="space-y-4">
           <SectionCard title={t.general} icon={<Sparkles className="h-4 w-4" />}>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
@@ -255,7 +264,7 @@ export function SettingsPage({
                     <div className="mt-1 line-clamp-2 text-xs text-slate-500">{action.prompt}</div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
                       <span className="rounded bg-slate-100 px-2 py-1">
-                        {action.ask_before_run ? t.askBeforeRun : "Run direct"}
+                        {action.ask_before_run ? t.askBeforeRun : t.runDirect}
                       </span>
                       {action.return_with_source ? (
                         <span className="rounded bg-slate-100 px-2 py-1">{t.returnWithSource}</span>
@@ -294,6 +303,22 @@ export function SettingsPage({
             ) : (
               t.savedHint
             )}
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200 bg-white/95 px-5 py-3 shadow-[0_-12px_30px_rgba(15,23,42,0.06)]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+          <div className="text-sm text-slate-500">{error ? error : t.settingsSaveHint}</div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => window.desktopApi?.closeSettings(false)}>
+              {t.close}
+            </Button>
+            <Button size="sm" onClick={saveAll} disabled={saving} className="bg-teal-600 text-white hover:bg-teal-700">
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              {t.saveAll}
+            </Button>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Sparkles, X } from "lucide-react"
+import { FileText, MessageSquare, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { LanguagePills } from "../components/LanguagePills"
@@ -24,6 +24,7 @@ export function AskPage({
   const [isComposing, setIsComposing] = useState(false)
   const [compositionLockedUntil, setCompositionLockedUntil] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const isPromptOnly = payload.contextMode === "prompt_only"
 
   useEffect(() => {
     if (document.activeElement !== textareaRef.current) {
@@ -61,6 +62,10 @@ export function AskPage({
             <Sparkles className="h-4 w-4 text-teal-600" />
             {payload.title || t.askTitle}
           </h2>
+          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500">
+            {isPromptOnly ? <MessageSquare className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+            {isPromptOnly ? t.contextPromptOnly : t.contextSelectedText}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <LanguagePills currentLang={uiLang} onChange={changeLang} />
@@ -74,20 +79,20 @@ export function AskPage({
       </div>
 
       {payload.responseModeEnabled ? (
-        <div className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.responseMode}</div>
-          <div className="flex gap-2">
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t.responseMode}</div>
+          <div className="flex gap-1.5 rounded-md bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => setResponseMode("paste")}
-              className={`rounded-lg px-3 py-2 text-sm ${responseMode === "paste" ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-700"}`}
+              className={`rounded px-3 py-1.5 text-sm ${responseMode === "paste" ? "bg-teal-600 text-white shadow-sm" : "text-slate-700 hover:bg-white"}`}
             >
               {t.responsePaste}
             </button>
             <button
               type="button"
               onClick={() => setResponseMode("chat")}
-              className={`rounded-lg px-3 py-2 text-sm ${responseMode === "chat" ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-700"}`}
+              className={`rounded px-3 py-1.5 text-sm ${responseMode === "chat" ? "bg-teal-600 text-white shadow-sm" : "text-slate-700 hover:bg-white"}`}
             >
               {t.responseChat}
             </button>

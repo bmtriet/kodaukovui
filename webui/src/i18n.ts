@@ -79,6 +79,11 @@ export const translations = {
     imageSourceDoNotAsk: "Don't ask again in this session",
     popupTextActions: "Text Actions",
     popupAiTools: "AI Tools",
+    runDirect: "Run direct",
+    withSource: "With source",
+    contextSelectedText: "Selected text",
+    contextPromptOnly: "Prompt only",
+    settingsSaveHint: "Unsaved changes are kept in this window until you save.",
   },
   vi: {
     askTitle: "Yêu cầu bổ sung",
@@ -158,6 +163,11 @@ export const translations = {
     imageSourceDoNotAsk: "Không hỏi lại trong phiên làm việc này",
     popupTextActions: "Thao tác văn bản",
     popupAiTools: "Công cụ AI",
+    runDirect: "Chạy ngay",
+    withSource: "Kèm source",
+    contextSelectedText: "Đang dùng selected text",
+    contextPromptOnly: "Không có selected text",
+    settingsSaveHint: "Thay đổi chỉ áp dụng sau khi bấm lưu.",
   },
   zh: {
     askTitle: "附加要求",
@@ -237,6 +247,11 @@ export const translations = {
     imageSourceDoNotAsk: "本次会话中不再询问",
     popupTextActions: "文本操作",
     popupAiTools: "AI 工具",
+    runDirect: "直接运行",
+    withSource: "附原文",
+    contextSelectedText: "选中文本上下文",
+    contextPromptOnly: "无选中文本",
+    settingsSaveHint: "更改会在保存后生效。",
   },
 }
 

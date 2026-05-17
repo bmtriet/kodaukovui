@@ -34,11 +34,11 @@ impl Page {
 
     fn size(self) -> (f64, f64) {
         match self {
-            Page::Popup => (420.0, 560.0),
+            Page::Popup => (480.0, 560.0),
             Page::Ask => (720.0, 430.0),
             Page::Settings => (980.0, 780.0),
             Page::Chat => (900.0, 760.0),
-            Page::ImageSource => (1280.0, 860.0),
+            Page::ImageSource => (920.0, 620.0),
         }
     }
 
