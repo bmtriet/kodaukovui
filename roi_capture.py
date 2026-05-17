@@ -7,11 +7,13 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import traceback
 from ctypes import POINTER, Structure, byref, c_long, c_void_p
 
 
 tk = None
+Image = None
 ImageGrab = None
 ImageTk = None
 
@@ -169,12 +171,13 @@ def load_framework(name: str):
 
 
 def ensure_tk_runtime():
-    global tk, ImageGrab, ImageTk
-    if tk is not None and ImageGrab is not None and ImageTk is not None:
+    global tk, Image, ImageGrab, ImageTk
+    if tk is not None and Image is not None and ImageGrab is not None and ImageTk is not None:
         return True
 
     try:
         import tkinter as tk_module
+        from PIL import Image as image_module
         from PIL import ImageGrab as image_grab_module
         from PIL import ImageTk as image_tk_module
     except ModuleNotFoundError as exc:
@@ -193,9 +196,86 @@ def ensure_tk_runtime():
         raise
 
     tk = tk_module
+    Image = image_module
     ImageGrab = image_grab_module
     ImageTk = image_tk_module
     return True
+
+
+def capture_monitor_screenshot(monitor):
+    if sys.platform == "darwin":
+        screenshot = capture_macos_screenshot(monitor)
+    else:
+        screenshot = ImageGrab.grab(
+            bbox=(
+                monitor["left"],
+                monitor["top"],
+                monitor["right"],
+                monitor["bottom"],
+            )
+        )
+
+    if is_probably_permission_black_frame(screenshot):
+        print(
+            "[MACOS] Ảnh chụp màn hình đang trả về khung đen. Thường là do macOS chưa cấp Screen Recording "
+            "cho đúng app đang chạy KoDauKoVui.",
+            file=sys.stderr,
+            flush=True,
+        )
+        print(
+            "[MACOS] Hãy bật Screen Recording cho Terminal/iTerm hoặc Python/KoDauKoVui, quit hẳn app đó, rồi chạy lại.",
+            file=sys.stderr,
+            flush=True,
+        )
+        open_screen_recording_settings()
+        return None
+
+    return screenshot
+
+
+def capture_macos_screenshot(monitor):
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+        temp_path = temp_file.name
+
+    try:
+        region = f"{monitor['left']},{monitor['top']},{monitor['width']},{monitor['height']}"
+        result = subprocess.run(
+            ["screencapture", "-x", "-R", region, temp_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and os.path.getsize(temp_path) > 0:
+            image = Image.open(temp_path)
+            image.load()
+            return image
+    except Exception:
+        pass
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+
+    return ImageGrab.grab(
+        bbox=(
+            monitor["left"],
+            monitor["top"],
+            monitor["right"],
+            monitor["bottom"],
+        )
+    )
+
+
+def is_probably_permission_black_frame(image):
+    if sys.platform != "darwin":
+        return False
+    if image.width == 0 or image.height == 0:
+        return True
+
+    sample = image.resize((1, 1)).convert("RGB").getpixel((0, 0))
+    return max(sample) <= 3
 
 
 def get_monitor_for_point(monitors, x: int, y: int):
@@ -218,14 +298,9 @@ class RoiCaptureOverlay:
 
         self.pointer_x, self.pointer_y = get_current_pointer_position(self.root)
         self.monitor = self._resolve_monitor()
-        self.screenshot = ImageGrab.grab(
-            bbox=(
-                self.monitor["left"],
-                self.monitor["top"],
-                self.monitor["right"],
-                self.monitor["bottom"],
-            )
-        )
+        self.screenshot = capture_monitor_screenshot(self.monitor)
+        if self.screenshot is None:
+            raise RuntimeError("Screen Recording permission is missing or returning a black frame.")
         self.photo = ImageTk.PhotoImage(self.screenshot)
 
         self.canvas = tk.Canvas(

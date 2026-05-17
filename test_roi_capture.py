@@ -1,7 +1,15 @@
 import unittest
 from unittest.mock import patch
 
-from roi_capture import ensure_screen_capture_permission, ensure_tk_runtime, get_monitor_for_point, parse_xrandr_listmonitors
+from PIL import Image
+
+from roi_capture import (
+    ensure_screen_capture_permission,
+    ensure_tk_runtime,
+    get_monitor_for_point,
+    is_probably_permission_black_frame,
+    parse_xrandr_listmonitors,
+)
 
 
 class RoiCaptureTests(unittest.TestCase):
@@ -56,10 +64,23 @@ class RoiCaptureTests(unittest.TestCase):
         with (
             patch("builtins.__import__", fake_import),
             patch("roi_capture.tk", None),
+            patch("roi_capture.Image", None),
             patch("roi_capture.ImageGrab", None),
             patch("roi_capture.ImageTk", None),
         ):
             self.assertFalse(ensure_tk_runtime())
+
+    def test_black_frame_detection_only_applies_on_macos(self):
+        black = Image.new("RGB", (20, 20), color="black")
+        with patch("roi_capture.sys.platform", "darwin"):
+            self.assertTrue(is_probably_permission_black_frame(black))
+        with patch("roi_capture.sys.platform", "linux"):
+            self.assertFalse(is_probably_permission_black_frame(black))
+
+    def test_black_frame_detection_allows_nonblack_macos_image(self):
+        image = Image.new("RGB", (20, 20), color=(20, 20, 20))
+        with patch("roi_capture.sys.platform", "darwin"):
+            self.assertFalse(is_probably_permission_black_frame(image))
 
 
 if __name__ == "__main__":
