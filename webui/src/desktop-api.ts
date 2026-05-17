@@ -1,42 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
-
-type SettingsSnapshot = {
-  settings: unknown
-  smart_actions: unknown[]
-  builtin_actions: unknown[]
-}
-
-type SaveSnapshotResponse = {
-  ok: boolean
-  error?: string
-  smart_actions?: unknown[]
-  builtin_actions?: unknown[]
-}
-
-type ChatApiResponse = {
-  ok: boolean
-  error?: string
-  session?: unknown
-}
-
-type DesktopApi = {
-  submitAsk: (prompt: string, responseMode?: string) => void | Promise<void>
-  cancelAsk: () => void | Promise<void>
-  submitPopup: (actionId: string) => void | Promise<void>
-  cancelPopup: () => void | Promise<void>
-  openSettings: () => void | Promise<void>
-  setUiLanguage: (lang: string) => void | Promise<void>
-  getSettingsSnapshot: () => Promise<SettingsSnapshot>
-  saveSettingsSnapshot: (payload: string) => Promise<SaveSnapshotResponse>
-  closeSettings: (saved: boolean) => void | Promise<void>
-  getChatState?: () => Promise<ChatApiResponse>
-  bootstrapChat: () => Promise<ChatApiResponse>
-  sendChatMessage: (prompt: string) => Promise<ChatApiResponse>
-  insertLatestReply: () => Promise<{ ok: boolean; error?: string }>
-  closeChat: () => void | Promise<void>
-  chooseImageSource: (source: string) => void | Promise<void>
-  cancelImageSource: () => void | Promise<void>
-}
+import type { SettingsSnapshot, SaveSnapshotResponse, ChatApiResponse, DesktopApi } from "./types"
 
 declare global {
   interface Window {
@@ -64,17 +27,17 @@ function createTauriApi(): DesktopApi {
     sendChatMessage: (prompt) => invoke<ChatApiResponse>("send_chat_message", { prompt }),
     insertLatestReply: () => invoke<{ ok: boolean; error?: string }>("insert_latest_reply"),
     closeChat: () => invoke("close_chat"),
-    chooseImageSource: (source) => invoke("choose_image_source", { source }),
+    chooseImageSource: (source, doNotAskAgain) => invoke("choose_image_source", { source, doNotAskAgain }),
     cancelImageSource: () => invoke("cancel_image_source"),
   }
 }
 
 export function installDesktopApiBridge() {
-  const pywebviewWindow = window as Window & { pywebview?: { api: unknown } }
-  if (!isTauriRuntime() || pywebviewWindow.pywebview?.api) {
+  const desktopWindow = window as Window & { desktopApi?: DesktopApi }
+  if (!isTauriRuntime() || desktopWindow.desktopApi) {
     return
   }
 
-  ;(pywebviewWindow as { pywebview?: { api: DesktopApi } }).pywebview = { api: createTauriApi() }
-  window.dispatchEvent(new Event("pywebviewready"))
+  desktopWindow.desktopApi = createTauriApi()
+  window.dispatchEvent(new Event("desktopapiready"))
 }

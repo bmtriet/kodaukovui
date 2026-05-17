@@ -1,17 +1,12 @@
-use serde::Serialize;
-use tauri::State;
+use serde_json::json;
+use tauri::{AppHandle, State};
 
 use crate::{
     platform,
+    runtime::{self, RuntimeState},
     settings::{AppState, SaveSnapshotResponse, SettingsSnapshot},
+    windowing::{self, Page},
 };
-
-#[derive(Debug, Serialize)]
-pub struct ChatResponse {
-    pub ok: bool,
-    pub error: Option<String>,
-    pub session: Option<serde_json::Value>,
-}
 
 #[tauri::command]
 pub fn get_settings_snapshot(state: State<'_, AppState>) -> SettingsSnapshot {
@@ -40,66 +35,91 @@ pub fn save_settings_snapshot(state: State<'_, AppState>, payload: String) -> Sa
 }
 
 #[tauri::command]
-pub fn set_ui_language(_lang: String) {}
-
-#[tauri::command]
-pub fn submit_ask(prompt: String, response_mode: Option<String>) {
-    println!("submit_ask stub: prompt={prompt:?}, response_mode={response_mode:?}");
+pub fn set_ui_language(state: State<'_, AppState>, lang: String) {
+    let mut snapshot = state.snapshot();
+    snapshot.settings.ui_language = lang;
+    let _ = state.save_snapshot(snapshot);
 }
 
 #[tauri::command]
-pub fn cancel_ask() {}
-
-#[tauri::command]
-pub fn submit_popup(action_id: String) {
-    println!("submit_popup stub: action_id={action_id}");
+pub fn submit_ask(state: State<'_, RuntimeState>, prompt: String, response_mode: Option<String>) {
+    state.answer_pending(
+        Page::Ask,
+        json!({
+            "prompt": prompt,
+            "response_mode": response_mode.unwrap_or_else(|| "paste".to_string())
+        }),
+    );
 }
 
 #[tauri::command]
-pub fn cancel_popup() {}
-
-#[tauri::command]
-pub fn open_settings() {}
-
-#[tauri::command]
-pub fn close_settings(_saved: bool) {}
-
-#[tauri::command]
-pub fn choose_image_source(source: String) {
-    println!("choose_image_source stub: source={source}");
+pub fn cancel_ask(app: AppHandle, state: State<'_, RuntimeState>) {
+    state.answer_pending(Page::Ask, json!({ "type": "cancel" }));
+    windowing::hide_window(&app, Page::Ask);
 }
 
 #[tauri::command]
-pub fn cancel_image_source() {}
-
-#[tauri::command]
-pub fn bootstrap_chat() -> ChatResponse {
-    ChatResponse {
-        ok: false,
-        error: Some("Chat runtime is not ported to Rust yet.".to_string()),
-        session: None,
-    }
+pub fn submit_popup(app: AppHandle, state: State<'_, RuntimeState>, action_id: String) {
+    state.answer_pending(Page::Popup, json!({ "type": "popup_action", "action_id": action_id }));
+    windowing::hide_window(&app, Page::Popup);
 }
 
 #[tauri::command]
-pub fn send_chat_message(_prompt: String) -> ChatResponse {
-    ChatResponse {
-        ok: false,
-        error: Some("Chat runtime is not ported to Rust yet.".to_string()),
-        session: None,
-    }
+pub fn cancel_popup(app: AppHandle, state: State<'_, RuntimeState>) {
+    state.answer_pending(Page::Popup, json!({ "type": "cancel" }));
+    windowing::hide_window(&app, Page::Popup);
 }
 
 #[tauri::command]
-pub fn insert_latest_reply() -> serde_json::Value {
-    serde_json::json!({
-        "ok": false,
-        "error": "Paste-back runtime is not ported to Rust yet."
-    })
+pub fn open_settings(app: AppHandle, settings: State<'_, AppState>, state: State<'_, RuntimeState>) {
+    state.answer_pending(Page::Popup, json!({ "type": "open_settings" }));
+    let lang = settings.snapshot().settings.ui_language;
+    let _ = windowing::open_settings_page(&app, &lang);
 }
 
 #[tauri::command]
-pub fn close_chat() {}
+pub fn close_settings(app: AppHandle, _saved: bool) {
+    windowing::hide_window(&app, Page::Settings);
+}
+
+#[tauri::command]
+pub fn choose_image_source(app: AppHandle, state: State<'_, RuntimeState>, source: String, do_not_ask_again: Option<bool>) {
+    state.answer_pending(Page::ImageSource, json!({ "source": source, "do_not_ask_again": do_not_ask_again.unwrap_or(false) }));
+    windowing::hide_window(&app, Page::ImageSource);
+}
+
+#[tauri::command]
+pub fn cancel_image_source(app: AppHandle, state: State<'_, RuntimeState>) {
+    state.answer_pending(Page::ImageSource, json!({ "type": "cancel" }));
+    windowing::hide_window(&app, Page::ImageSource);
+}
+
+#[tauri::command]
+pub async fn bootstrap_chat(
+    settings: State<'_, AppState>,
+    runtime_state: State<'_, RuntimeState>,
+) -> Result<runtime::ChatResponse, String> {
+    Ok(runtime::bootstrap_chat(settings.inner(), runtime_state.inner()).await)
+}
+
+#[tauri::command]
+pub async fn send_chat_message(
+    settings: State<'_, AppState>,
+    runtime_state: State<'_, RuntimeState>,
+    prompt: String,
+) -> Result<runtime::ChatResponse, String> {
+    Ok(runtime::send_chat_message(settings.inner(), runtime_state.inner(), prompt).await)
+}
+
+#[tauri::command]
+pub fn insert_latest_reply(runtime_state: State<'_, RuntimeState>) -> serde_json::Value {
+    runtime::insert_latest_reply(runtime_state.inner())
+}
+
+#[tauri::command]
+pub fn close_chat(app: AppHandle) {
+    windowing::hide_window(&app, Page::Chat);
+}
 
 #[tauri::command]
 pub fn platform_summary() -> platform::PlatformSummary {
