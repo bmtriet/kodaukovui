@@ -78,7 +78,8 @@ pub fn open_settings(app: AppHandle, settings: State<'_, AppState>, state: State
 }
 
 #[tauri::command]
-pub fn close_settings(app: AppHandle, _saved: bool) {
+pub fn close_settings(app: AppHandle, saved: bool) {
+    let _ = saved;
     windowing::hide_window(&app, Page::Settings);
 }
 
