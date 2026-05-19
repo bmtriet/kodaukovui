@@ -192,14 +192,6 @@ pub async fn toggle_popup(
     open_popup(app, settings_state, runtime).await
 }
 
-pub async fn toggle_popup_from_dock(
-    app: AppHandle,
-    settings_state: tauri::State<'_, AppState>,
-    runtime: tauri::State<'_, RuntimeState>,
-) -> Result<(), String> {
-    toggle_popup(app, settings_state, runtime).await
-}
-
 pub async fn retake_image_for_ask(app: AppHandle, settings_state: &AppState, runtime: &RuntimeState) -> serde_json::Value {
     windowing::hide_window(&app, Page::Ask);
     tokio::time::sleep(std::time::Duration::from_millis(220)).await;
@@ -356,20 +348,42 @@ fn show_error_dialog(app: &AppHandle, ui_language: &str, message: &str) {
 fn deliver_text_result(
     app: &AppHandle,
     snapshot: &SettingsSnapshot,
-    _runtime: &RuntimeState,
+    runtime: &RuntimeState,
     text: &str,
-    target_window_id: Option<&str>,
+    target_window_id: Option<String>,
     had_loading_dialog: bool,
+    user_prompt: &str,
+    session_kind: &str,
+    session_title: &str,
 ) -> Result<(), String> {
-    if !had_loading_dialog && native::target_has_editable_focus(target_window_id) {
-        if native::paste_text(text, target_window_id).is_ok() {
+    if !had_loading_dialog && native::target_has_editable_focus(target_window_id.as_deref()) {
+        if native::paste_text(text, target_window_id.as_deref()).is_ok() {
             return Ok(());
         }
     }
 
-    native::set_clipboard_text(text).map_err(|err| err.to_string())?;
+    if !had_loading_dialog {
+        native::set_clipboard_text(text).map_err(|err| err.to_string())?;
+    }
+
     if snapshot.settings.show_response_dialog_when_no_input || had_loading_dialog {
-        show_response_dialog(app, &snapshot.settings.ui_language, "clipBo", text, "clipBo")?;
+        let messages = vec![
+            ChatMessage { role: "user".to_string(), content: user_prompt.to_string() },
+            ChatMessage { role: "assistant".to_string(), content: text.to_string() },
+        ];
+        let session = ChatSession {
+            kind: session_kind.to_string(),
+            title: session_title.to_string(),
+            messages,
+            latest_reply: text.to_string(),
+            context_hint: "AI result — continue the conversation or copy text above.".to_string(),
+            selected_text: None,
+            image_payload: None,
+            initial_user_prompt: Some(user_prompt.to_string()),
+            target_window_id,
+        };
+        runtime.set_chat_session(session);
+        windowing::show_page(app, Page::Chat, &snapshot.settings.ui_language, json!({}), None, None)?;
     }
     Ok(())
 }
@@ -446,8 +460,11 @@ async fn process_smart_action(
         &snapshot,
         runtime,
         &result,
-        target_window_id.as_deref(),
+        target_window_id.clone(),
         show_loading,
+        &action.name,
+        "smart_action",
+        &action.name,
     )?;
     save_history(settings_state, &selected_text, &result);
     launcher::note_translation_action(settings_state, &action.id);
@@ -526,8 +543,11 @@ async fn process_ai_prompt(
         &snapshot,
         runtime,
         &result,
-        target_window_id.as_deref(),
+        target_window_id.clone(),
         show_loading,
+        &ask.prompt,
+        "ai_prompt",
+        "AI Prompt",
     )?;
     let source = if selected_text.trim().is_empty() {
         format!("[ai-prompt] {}", ask.prompt)
@@ -594,8 +614,11 @@ async fn process_image_ask(
         &snapshot,
         runtime,
         &result,
-        target_window_id.as_deref(),
+        target_window_id.clone(),
         show_loading,
+        &ask.prompt,
+        "image_ask",
+        "Ask by Image",
     )?;
     save_history(settings_state, &format!("[image:{}] {}", image.source, ask.prompt), &result);
     Ok(())
