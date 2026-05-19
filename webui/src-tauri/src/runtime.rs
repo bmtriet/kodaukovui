@@ -668,16 +668,14 @@ pub fn insert_latest_reply(app: &AppHandle, settings_state: &AppState, runtime: 
         return json!({ "ok": false, "error": "No assistant reply to insert." });
     }
     let snapshot = settings_state.snapshot();
-    match deliver_text_result(
-        app,
-        &snapshot,
-        &session.latest_reply,
-        session.target_window_id.as_deref(),
-        "AI Chat",
-        "Latest Reply",
-    ) {
-        Ok(()) => json!({ "ok": true }),
-        Err(err) => json!({ "ok": false, "error": err }),
+    match native::set_clipboard_text(&session.latest_reply) {
+        Ok(()) => {
+            if snapshot.settings.show_response_dialog_when_no_input {
+                let _ = show_response_dialog(app, &snapshot.settings.ui_language, "AI Chat", &session.latest_reply, "Latest Reply");
+            }
+            json!({ "ok": true })
+        }
+        Err(err) => json!({ "ok": false, "error": err.to_string() }),
     }
 }
 
