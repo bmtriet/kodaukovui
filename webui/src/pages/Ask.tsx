@@ -27,6 +27,9 @@ export function AskPage({
   const [imagePayload, setImagePayload] = useState<ImagePayload | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isPromptOnly = payload.contextMode === "prompt_only"
+  const selectedText = payload.selectedText || ""
+  const hasSelectedText = !isPromptOnly && !!selectedText
+  const selectedLineCount = selectedText ? selectedText.split(/\n/).length : 0
   const imagePreviewUrl = imagePayload?.image_base64
     ? `data:${imagePayload.mime_type || "image/png"};base64,${imagePayload.image_base64}`
     : ""
@@ -128,11 +131,22 @@ export function AskPage({
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="flex min-h-24 items-center rounded-lg border border-dashed border-slate-200 bg-white px-4 text-sm text-slate-500">
-              Image context is loading...
+          ) : hasSelectedText ? (
+            <div className="flex min-w-0 items-center gap-3 rounded-lg border border-teal-200 bg-teal-50/30 p-3 shadow-sm">
+              <div className="flex h-20 w-28 shrink-0 items-center justify-center rounded-md border border-teal-200 bg-white">
+                <FileText className="h-8 w-8 text-teal-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Text context</div>
+                <div className="mt-1 truncate text-sm font-semibold text-slate-900">
+                  {selectedLineCount} {selectedLineCount === 1 ? "line" : "lines"} of selected text
+                </div>
+                <div className="mt-1 truncate text-xs text-slate-600 max-w-[260px]">
+                  {selectedText.slice(0, 120)}{selectedText.length > 120 ? "…" : ""}
+                </div>
+              </div>
             </div>
-          )}
+          ) : null}
 
           <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             {payload.responseModeEnabled ? (

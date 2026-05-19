@@ -338,6 +338,7 @@ async fn process_smart_action(
                 "responseModeEnabled": false,
                 "defaultResponseMode": "paste",
                 "contextMode": "selected_text",
+                "selectedText": selected_text.as_str(),
             }),
         )
         .await?;
@@ -401,6 +402,7 @@ async fn process_ai_prompt(
             "responseModeEnabled": true,
             "defaultResponseMode": "chat",
             "contextMode": context_mode,
+            "selectedText": if context_mode == "selected_text" { selected_text.as_str() } else { "" },
         }),
     )
     .await?;

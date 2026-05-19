@@ -60,6 +60,7 @@ export type AskPayload = {
   defaultResponseMode?: ResponseMode
   contextMode?: "selected_text" | "prompt_only"
   imageContextAvailable?: boolean
+  selectedText?: string
 }
 
 export type ImageSourcePayload = {
