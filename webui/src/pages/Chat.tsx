@@ -110,6 +110,7 @@ export function ChatPage({
       return
     }
     setInsertSuccess(t.chatInsertSuccess)
+    window.setTimeout(() => window.desktopApi?.closeChat(), 400)
   }
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
