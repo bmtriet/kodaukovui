@@ -141,8 +141,8 @@ export function AskPage({
                 <div className="mt-1 truncate text-sm font-semibold text-slate-900">
                   {selectedLineCount} {selectedLineCount === 1 ? "line" : "lines"} of selected text
                 </div>
-                <div className="mt-1 truncate text-xs text-slate-600 max-w-[260px]">
-                  {selectedText.slice(0, 120)}{selectedText.length > 120 ? "…" : ""}
+                <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-600">
+                  {selectedText.slice(0, 240)}{selectedText.length > 240 ? "…" : ""}
                 </div>
               </div>
             </div>
