@@ -1,6 +1,6 @@
 [package]
 name = "clipbo"
-version = "0.3.0"
+version = "0.3.1"
 description = "clipBo desktop shell"
 authors = ["clipBo"]
 edition = "2021"

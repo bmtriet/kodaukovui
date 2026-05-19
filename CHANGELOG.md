@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.1 — 2026-05-19
+
+### Changed
+- **Response dialog merged into AI Chat**: when paste is not possible, result opens in Chat with loading animation instead of a static dialog. User can continue the conversation, refine results, and copy.
+- Hotkey now toggles popup (close if open, open if closed) — no more "channel closed" errors on double-press.
+- Setting renamed: `"Open chat when paste is not possible"` (was "Show result dialog when copy succeeds").
+
+### Fixed
+- Insert Latest Reply clipboard crash fixed: replaced fragile AppleScript paste flow with simple clipboard copy.
+- Clipboard no longer overwritten when result is shown in Chat (no editable zone).
+- Error dialog now shows user-facing messages when translate/smart-action silently fails.
+- Loading UX: Chat shows animated dots while waiting for AI response.
+
+---
+
 ## v0.3.0 — 2026-05-19
 
 ### Added
