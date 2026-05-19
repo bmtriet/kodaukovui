@@ -79,9 +79,10 @@ pub fn build_popup_payload(
     settings_state: &AppState,
     snapshot: &SettingsSnapshot,
     target_window_id: Option<&str>,
-) -> PopupPayload {
+) -> (PopupPayload, String) {
     let _ = target_window_id;
     let selected_text = native::copy_selected_text_fast().unwrap_or_default();
+    let captured = selected_text.clone();
     let has_selected_text = !selected_text.trim().is_empty();
     let (has_clipboard_image, has_clipboard_text) = if has_selected_text {
         (false, false)
@@ -101,7 +102,7 @@ pub fn build_popup_payload(
     let ranked_items = rank_items(snapshot, &context, &launcher_state);
     let sections = build_sections(ranked_items, &context, &launcher_state);
 
-    PopupPayload { context, sections }
+    (PopupPayload { context, sections }, captured)
 }
 
 pub fn note_translation_action(settings_state: &AppState, action_id: &str) {

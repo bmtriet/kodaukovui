@@ -44,6 +44,7 @@ pub struct RuntimeState {
     image_source: Mutex<Option<PendingSender>>,
     chat_session: Mutex<Option<ChatSession>>,
     ask_image_context: Mutex<Option<ImagePayload>>,
+    popup_selected_text: Mutex<Option<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -92,6 +93,19 @@ impl RuntimeState {
             .clone()
     }
 
+    pub fn set_popup_selected_text(&self, text: String) {
+        if !text.trim().is_empty() {
+            *self.popup_selected_text.lock().expect("selected text state poisoned") = Some(text.trim().to_string());
+        }
+    }
+
+    pub fn take_popup_selected_text(&self) -> Option<String> {
+        self.popup_selected_text
+            .lock()
+            .expect("selected text state poisoned")
+            .take()
+    }
+
     fn pending_slot(&self, page: Page) -> &Mutex<Option<PendingSender>> {
         match page {
             Page::Ask => &self.ask,
@@ -112,7 +126,8 @@ pub async fn open_popup(
 ) -> Result<(), String> {
     let target_window_id = native::active_window_id();
     let snapshot = settings_state.snapshot();
-    let payload = launcher::build_popup_payload(settings_state.inner(), &snapshot, target_window_id.as_deref());
+    let (payload, selected_text) = launcher::build_popup_payload(settings_state.inner(), &snapshot, target_window_id.as_deref());
+    runtime.set_popup_selected_text(selected_text);
     let (sender, receiver) = oneshot::channel();
     runtime.set_pending(Page::Popup, sender);
     let popup_size = popup_size_for_payload(&payload);
@@ -304,7 +319,11 @@ async fn process_smart_action(
         .find(|action| action.id == action_id)
         .cloned()
         .ok_or_else(|| format!("Smart action not found: {action_id}"))?;
-    let selected_text = native::copy_selected_text(target_window_id.as_deref()).map_err(|err| err.to_string())?;
+    let selected_text = runtime
+        .take_popup_selected_text()
+        .filter(|text| !text.is_empty())
+        .or_else(|| native::copy_selected_text(target_window_id.as_deref()).ok().filter(|text| !text.trim().is_empty()))
+        .ok_or_else(|| "No text selected or in clipboard.".to_string())?;
     if selected_text.trim().is_empty() {
         return Err("No text selected or in clipboard.".to_string());
     }
@@ -358,7 +377,10 @@ async fn process_ai_prompt(
     snapshot: SettingsSnapshot,
     target_window_id: Option<String>,
 ) -> Result<(), String> {
-    let selected_text = native::copy_selected_text(target_window_id.as_deref()).unwrap_or_default();
+    let selected_text = runtime
+        .take_popup_selected_text()
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| native::copy_selected_text(target_window_id.as_deref()).unwrap_or_default());
     let context_mode = if selected_text.trim().is_empty() {
         "prompt_only"
     } else {
