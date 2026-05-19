@@ -192,7 +192,9 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
                 title={providerModel}
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600"
               >
-                <img src={providerIcon} alt={provider} className="h-3.5 w-3.5 object-contain" />
+                <span className="flex h-5 w-5 items-center justify-center rounded-sm bg-white">
+                  <img src={providerIcon} alt={provider} className="h-3.5 w-3.5 object-contain" />
+                </span>
                 {provider}
               </div>
               <div
