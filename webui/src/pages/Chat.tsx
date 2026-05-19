@@ -239,9 +239,9 @@ export function ChatPage({
                         type="button"
                         onClick={() => setPreviewOpen(true)}
                         className="block overflow-hidden rounded-md border border-white/40 bg-white/10 transition hover:bg-white/20"
-                        title="Preview image"
+                        title={t.chatPreviewImage}
                       >
-                        <img src={imagePreviewUrl} alt="Uploaded context" className="h-24 w-auto max-w-44 object-cover" />
+                        <img src={imagePreviewUrl} alt={t.chatImageAlt} className="h-24 w-auto max-w-44 object-cover" />
                       </button>
                     ) : null}
                     <div className="whitespace-pre-wrap break-words">{message.content}</div>
@@ -318,7 +318,7 @@ export function ChatPage({
       {previewOpen && imagePreviewUrl ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4" onClick={() => setPreviewOpen(false)}>
           <div className="max-h-[90vh] max-w-[90vw] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <img src={imagePreviewUrl} alt="Image preview" className="h-auto w-auto max-h-[90vh] max-w-[90vw] rounded-md" />
+            <img src={imagePreviewUrl} alt={t.contextImagePreview} className="h-auto w-auto max-h-[90vh] max-w-[90vw] rounded-md" />
           </div>
         </div>
       ) : null}

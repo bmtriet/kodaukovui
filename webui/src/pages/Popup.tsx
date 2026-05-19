@@ -198,7 +198,7 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
                 {provider}
               </div>
               <div
-                title="Active popup hotkey"
+                title={t.popupHotkeyTitle}
                 className="inline-flex items-center rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-700"
               >
                 {popupHotkey || "—"}
@@ -223,9 +223,9 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
             </div>
             <div className="space-y-2 text-sm text-slate-700">
               <p><span className="font-semibold">{t.authorLabel}:</span> Triết Bùi</p>
-              <p><span className="font-semibold">GitHub:</span> <a className="text-teal-700 underline" href="https://github.com/bmtriet/clipBo">github.com/bmtriet/clipBo</a></p>
-              <p><span className="font-semibold">Facebook:</span> <a className="text-teal-700 underline" href="https://fb.me/trietbui89">fb.me/trietbui89</a></p>
-              <p><span className="font-semibold">Email:</span> <a className="text-teal-700 underline" href="mailto:minhtrietbui@live.com">minhtrietbui@live.com</a></p>
+              <p><span className="font-semibold">{t.aboutGithub}:</span> <a className="text-teal-700 underline" href="https://github.com/bmtriet/clipBo">github.com/bmtriet/clipBo</a></p>
+              <p><span className="font-semibold">{t.aboutFacebook}:</span> <a className="text-teal-700 underline" href="https://fb.me/trietbui89">fb.me/trietbui89</a></p>
+              <p><span className="font-semibold">{t.aboutEmail}:</span> <a className="text-teal-700 underline" href="mailto:minhtrietbui@live.com">minhtrietbui@live.com</a></p>
             </div>
             <p className="mt-3 text-xs text-slate-500">{t.aboutContributeHint}</p>
           </div>

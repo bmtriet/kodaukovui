@@ -122,15 +122,15 @@ export function AskPage({
                 onClick={() => setPreviewOpen(true)}
                 className="shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50 transition hover:border-teal-300"
               >
-                <img src={imagePreviewUrl} alt="Image context" className="h-20 w-28 object-cover" />
+                <img src={imagePreviewUrl} alt={t.contextImagePreview} className="h-20 w-28 object-cover" />
               </button>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Image context</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t.contextImagePreview}</div>
                 <div className="mt-1 truncate text-sm font-semibold text-slate-900">
-                  {imagePayload?.source === "clipboard_image" ? "Clipboard image" : "Screen region"}
+                  {imagePayload?.source === "clipboard_image" ? t.clipboardImage : t.screenRegion}
                 </div>
                 <button type="button" onClick={() => setPreviewOpen(true)} className="mt-1 text-xs font-medium text-teal-700 hover:underline">
-                  Preview
+                  {t.preview}
                 </button>
               </div>
             </div>
@@ -141,17 +141,17 @@ export function AskPage({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Text context</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t.contextTextPreview}</div>
                   <button
                     type="button"
                     onClick={() => setContextCleared(true)}
                     className="shrink-0 text-[10px] font-semibold text-slate-400 hover:text-red-500 transition-colors"
                   >
-                    Clear
+                    {t.clearContext}
                   </button>
                 </div>
                 <div className="mt-1 truncate text-sm font-semibold text-slate-900">
-                  {selectedLineCount} {selectedLineCount === 1 ? "line" : "lines"} of selected text
+                  {selectedLineCount} {selectedLineCount === 1 ? t.contextTextLineCountSingular : t.contextTextLineCount}
                 </div>
                 <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-600">
                   {selectedText.slice(0, 240)}{selectedText.length > 240 ? "…" : ""}
@@ -235,12 +235,12 @@ export function AskPage({
             <X className="h-5 w-5" />
           </button>
           <div className="max-h-[90vh] max-w-[90vw] overflow-auto">
-            <img
-              src={imagePreviewUrl}
-              alt="Image context preview"
-              onClick={() => setPreviewOpen(false)}
-              className="h-auto w-auto max-h-[90vh] max-w-[90vw] cursor-zoom-out rounded-md bg-white shadow-2xl"
-            />
+              <img
+                src={imagePreviewUrl}
+                alt={t.contextImagePreview}
+                onClick={() => setPreviewOpen(false)}
+                className="h-auto w-auto max-h-[90vh] max-w-[90vw] cursor-zoom-out rounded-md bg-white shadow-2xl"
+              />
           </div>
         </div>
       ) : null}

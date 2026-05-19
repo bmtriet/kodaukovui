@@ -463,9 +463,9 @@ export function SettingsPage({
             <SectionCard title={t.aboutTitle} icon={<CircleHelp className="h-4 w-4" />}>
               <div className="space-y-2 text-sm text-slate-700">
                 <p><span className="font-semibold">{t.authorLabel}:</span> Triết Bùi</p>
-                <p><span className="font-semibold">GitHub:</span> <a className="text-teal-700 underline" href="https://github.com/bmtriet/clipBo">github.com/bmtriet/clipBo</a></p>
-                <p><span className="font-semibold">Facebook:</span> <a className="text-teal-700 underline" href="https://fb.me/trietbui89">fb.me/trietbui89</a></p>
-                <p><span className="font-semibold">Email:</span> <a className="text-teal-700 underline" href="mailto:minhtrietbui@live.com">minhtrietbui@live.com</a></p>
+                <p><span className="font-semibold">{t.aboutGithub}:</span> <a className="text-teal-700 underline" href="https://github.com/bmtriet/clipBo">github.com/bmtriet/clipBo</a></p>
+                <p><span className="font-semibold">{t.aboutFacebook}:</span> <a className="text-teal-700 underline" href="https://fb.me/trietbui89">fb.me/trietbui89</a></p>
+                <p><span className="font-semibold">{t.aboutEmail}:</span> <a className="text-teal-700 underline" href="mailto:minhtrietbui@live.com">minhtrietbui@live.com</a></p>
                 <p className="text-xs text-slate-500">{t.aboutContributeHint}</p>
               </div>
             </SectionCard>
