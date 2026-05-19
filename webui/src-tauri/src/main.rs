@@ -1,3 +1,3 @@
 fn main() {
-    kodaukovui_lib::run();
+    clipbo_lib::run();
 }

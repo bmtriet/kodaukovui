@@ -1,110 +1,62 @@
-# KoDauKoVui
+# clipBo
 
-KoDauKoVui là desktop app React/Vite + Tauri/Rust để xử lý selected text và hình ảnh bằng AI. Runtime Python đã được gỡ bỏ; app hiện chạy bằng Rust backend trong Tauri.
+clipBo is an open-source desktop app that helps you work faster with text and screenshots using AI.
 
-## Tính năng chính
-- Popup hotkey toàn cục để chọn smart action.
-- Icon `About` ngay trên popup để mở thông tin tác giả và kênh liên lạc/contribute.
-- Smart Action CRUD trong Settings.
-- Built-in `AI Prompt` và `Ask by Image`, hỗ trợ one-shot hoặc chat tiếp trên cùng context.
-- Rust AI runtime cho Gemini, OpenAI-compatible API, và Ollama.
-- Rust clipboard/pasteback và macOS ROI capture qua native `screencapture`.
-- Tự import cấu hình cũ lần đầu từ `.env`, `smart_actions.json`, `brain.md`, `history.json` nếu các file đó còn ở repo root.
+You can highlight text in any app, open clipBo with a hotkey, and run quick actions like translation, rewriting, or asking AI for help. You can also ask questions about screenshots by pasting an image or selecting a screen region.
 
-## Tác giả & liên hệ
-- Tác giả: **Triết Bùi**
-- GitHub: [bmtriet/kodaukovui](https://github.com/bmtriet/kodaukovui)
+## Why People Use clipBo
+- Quick AI help without switching tabs.
+- Reusable custom actions for repeated tasks.
+- Works across apps with global popup shortcuts.
+- Supports multiple AI providers (Gemini, OpenAI-compatible, Ollama).
+
+## What You Can Do
+- Open a smart action popup from anywhere.
+- Run built-in actions (`AI Prompt`, `Ask by Image`).
+- Create your own custom smart actions.
+- Continue responses in chat mode when needed.
+- Paste the latest AI reply back into your current app.
+
+## About & Contact
+- Author: **Triết Bùi**
+- GitHub: [bmtriet/clipBo](https://github.com/bmtriet/clipBo)
 - Facebook: [fb.me/trietbui89](https://fb.me/trietbui89)
 - Email: [minhtrietbui@live.com](mailto:minhtrietbui@live.com)
 
-## Chạy dev
+You can also use the `About` button inside the app to contact or contribute.
+
+## Install / Run (for contributors)
+If you want to run clipBo from source:
 
 ```bash
 chmod +x run.sh
 ./run.sh
 ```
 
-Hoặc chạy trực tiếp:
+Or:
 
 ```bash
-. "$HOME/.cargo/env"
 cd webui
 npm install
 npm run tauri:dev
 ```
 
-Build app:
+To build desktop packages:
 
 ```bash
 cd webui
 npm run tauri:build
 ```
 
-## Ubuntu/Linux prerequisites
-Tauri v2 dev build trên Linux cần `pkg-config`, GTK 3, WebKitGTK 4.1, Soup 3, và các gói build liên quan. Trên Ubuntu:
+## Permissions (macOS)
+clipBo may ask for:
+- **Accessibility** (for text copy/paste workflow)
+- **Screen Recording** (for screenshot region selection)
 
-```bash
-sudo apt update
-sudo apt install -y \
-  pkg-config \
-  libglib2.0-dev \
-  libgtk-3-dev \
-  libsoup-3.0-dev \
-  libjavascriptcoregtk-4.1-dev \
-  libwebkit2gtk-4.1-dev \
-  build-essential \
-  curl \
-  wget \
-  file \
-  libxdo-dev \
-  libssl-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  xdotool \
-  gnome-screenshot
-```
+These are required for full functionality.
 
-Repo này đã tắt feature Tauri `dbus` mặc định vì app không dùng tray trên Linux. Nếu bạn gặp lỗi kiểu `libdbus-sys` / `dbus-1.pc`, hãy cập nhật code hiện tại rồi chạy lại `./run.sh`.
+## Open Source
+Contributions are welcome.
 
-Khuyến nghị chạy bằng **Ubuntu on Xorg** thay vì Wayland nếu cần copy selected text và pasteback ổn định, vì app dùng `xdotool` để gửi `Ctrl+C`/`Ctrl+V` và restore cửa sổ đích.
-
-`Ask by Image` trên Linux cần một trong các tool capture vùng màn hình sau:
-- `gnome-screenshot` khuyến nghị cho Ubuntu GNOME.
-- `flameshot`.
-- `grim` + `slurp` cho Wayland/sway/wlroots.
-- `scrot` cho X11.
-
-## macOS permissions
-- Accessibility: cần cho copy selected text và pasteback bằng phím tắt hệ thống.
-- Screen Recording: cần cho `Ask by Image` khi chọn vùng màn hình.
-
-Khi thiếu quyền, app sẽ mở đúng trang **System Settings -> Privacy & Security**. Với Tauri packaged app, app xuất hiện dưới identity KoDauKoVui thay vì `Python`.
-
-## Cấu hình runtime
-Rust lưu cấu hình mới trong app data directory của Tauri:
-- `settings.json`
-- `smart_actions.json`
-- `builtin_actions.json`
-- `brain.md`
-- `history.json`
-
-Các file cũ ở repo root chỉ được dùng để import lần đầu, không còn là runtime chính.
-
-## Default actions
-- `1` -> `Thêm dấu tiếng Việt`
-- `e` -> `Translate to English`
-- `v` -> `Translate to Vietnamese`
-- `z` -> `Translate to Traditional Chinese`
-- `k` -> `Translate to Khmer`
-- `a` -> `AI Prompt`
-- `i` -> `Ask by Image`
-
-## Kiểm tra
-
-```bash
-cd webui
-npm run build
-cd src-tauri
-cargo test
-cargo check
-```
+If you find a bug, have an idea, or want to improve UX, please open an issue or pull request:
+[https://github.com/bmtriet/clipBo](https://github.com/bmtriet/clipBo)

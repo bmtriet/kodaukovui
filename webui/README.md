@@ -1,4 +1,4 @@
-# KoDauKoVui Web UI
+# clipBo Web UI
 
 React/Vite frontend for the Tauri desktop app. The desktop API is exposed as `window.desktopApi` and backed by Rust commands in `src-tauri`.
 

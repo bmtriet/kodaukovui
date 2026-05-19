@@ -30,17 +30,17 @@ impl Page {
 
     fn title(self) -> &'static str {
         match self {
-            Page::Popup => "KoDauKoVui Popup",
-            Page::Ask => "KoDauKoVui",
-            Page::Settings => "KoDauKoVui Settings",
-            Page::Chat => "KoDauKoVui Chat",
+            Page::Popup => "clipBo Popup",
+            Page::Ask => "clipBo",
+            Page::Settings => "clipBo Settings",
+            Page::Chat => "clipBo Chat",
             Page::ImageSource => "Ask by Image",
         }
     }
 
     fn size(self) -> (f64, f64) {
         match self {
-            Page::Popup => (480.0, 560.0),
+            Page::Popup => (480.0, 460.0),
             Page::Ask => (720.0, 430.0),
             Page::Settings => (980.0, 780.0),
             Page::Chat => (900.0, 760.0),

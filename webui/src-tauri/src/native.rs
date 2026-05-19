@@ -464,7 +464,7 @@ fn press_key_chord(key: &str) -> Result<(), NativeError> {
             Ok(())
         } else {
             Err(NativeError::Message(
-                "Cannot send keyboard shortcut. Grant Accessibility permission to KoDauKoVui."
+                "Cannot send keyboard shortcut. Grant Accessibility permission to clipBo."
                     .to_string(),
             ))
         }

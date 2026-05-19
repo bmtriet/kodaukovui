@@ -8,7 +8,6 @@ import {
   Pencil,
   Plus,
   Save,
-  Settings,
   Sparkles,
   Trash2,
 } from "lucide-react"
@@ -19,6 +18,7 @@ import { SectionCard } from "../components/SectionCard"
 import { LanguagePills } from "../components/LanguagePills"
 import { BuiltinHotkeyEditor } from "../components/BuiltinHotkeyEditor"
 import { SmartActionDialog } from "../components/SmartActionDialog"
+import appIcon from "../assets/app-icon.png"
 import type { GeneralSettings, SmartAction, BuiltinAction, UiLanguage } from "../types"
 import { createEmptyAction } from "../types"
 import type { EnTranslations } from "../i18n"
@@ -155,9 +155,7 @@ export function SettingsPage({
     <div className="flex h-screen flex-col overflow-hidden bg-slate-50 font-sans text-slate-900">
       <div className="desktop-drag-region flex cursor-move items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-            <Settings className="h-5 w-5" />
-          </div>
+          <img src={appIcon} alt="clipBo" className="h-10 w-10 object-contain" />
           <div>
             <h2 className="text-base font-semibold text-slate-900">{t.settingsTitle}</h2>
             <p className="text-xs text-slate-500">{t.settingsSubtitle}</p>

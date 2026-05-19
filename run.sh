@@ -51,5 +51,5 @@ fi
 
 check_linux_prereqs
 
-echo "Starting KoDauKoVui with Tauri/Rust..."
+echo "Starting clipBo with Tauri/Rust..."
 (cd webui && npm run tauri:dev)

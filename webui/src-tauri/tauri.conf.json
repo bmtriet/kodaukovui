@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "KoDauKoVui",
+  "productName": "clipBo",
   "version": "0.1.0",
   "identifier": "com.kodaukovui.desktop",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "KoDauKoVui",
+        "title": "clipBo",
         "label": "main",
         "width": 920,
         "height": 680,
@@ -29,6 +29,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns"
+    ]
   }
 }

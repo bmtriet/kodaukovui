@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
-import { AlertCircle, Bot, CircleHelp, Globe2, Image, Settings, Sparkles, Type, X } from "lucide-react"
+import { Bot, CircleHelp, Globe2, Image, Settings, Sparkles, Type, X } from "lucide-react"
 import { parsePayload, type PopupItem, type PopupPayload, type PopupSection, type UiLanguage } from "../types"
 import { isEditableTarget, isImeComposing } from "../types"
 import { waitForDesktopApi } from "../types"
 import { LanguagePills } from "../components/LanguagePills"
+import appIcon from "../assets/app-icon.png"
+import geminiIcon from "../assets/providers/gemini.svg"
+import openaiIcon from "../assets/providers/openai.svg"
+import ollamaIcon from "../assets/providers/ollama.svg"
 import type { EnTranslations } from "../i18n"
 
 export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang: UiLanguage; changeLang: (newLang: UiLanguage) => void }) {
@@ -11,7 +15,9 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
   const sections = payload.sections || []
   const popupItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
   const [provider, setProvider] = useState("gemini")
+  const [providerModel, setProviderModel] = useState("")
   const [showAbout, setShowAbout] = useState(false)
+  const providerIcon = provider === "openai" ? openaiIcon : provider === "ollama" ? ollamaIcon : geminiIcon
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -35,7 +41,17 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
       const api = await waitForDesktopApi()
       const snapshot = await api.getSettingsSnapshot()
       if (!mounted) return
-      setProvider((snapshot?.settings?.AI_PROVIDER || "gemini").toLowerCase())
+      const nextProvider = (snapshot?.settings?.AI_PROVIDER || "gemini").toLowerCase()
+      setProvider(nextProvider)
+      const settings = snapshot?.settings
+      if (!settings) return
+      const model =
+        nextProvider === "openai"
+          ? settings.OPENAI_MODEL
+          : nextProvider === "ollama"
+            ? settings.OLLAMA_MODEL
+            : settings.GEMINI_MODEL
+      setProviderModel(model || "")
     }
     hydrateProvider().catch(() => {})
     return () => {
@@ -132,12 +148,10 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
     <div className="h-screen bg-white font-sans text-slate-900">
       <div className="flex h-full flex-col overflow-hidden border border-slate-200/80 bg-white">
         <div className="desktop-drag-region flex cursor-move items-center border-b border-slate-200/80 px-3 py-3">
-          <div className="mr-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-100">
-            <Sparkles className="h-5 w-5" />
-          </div>
+          <img src={appIcon} alt="clipBo" className="mr-2.5 h-10 w-10 shrink-0 object-contain" />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-xl font-bold text-slate-800">{t.popupTitle}</h2>
-            <p className="truncate text-xs text-slate-500">{t.popupSubtitle} · {t.currentProvider}: {provider}</p>
+            <p className="truncate text-xs text-slate-500">{t.popupSubtitle}</p>
           </div>
           <button
             aria-label={t.about}
@@ -167,11 +181,14 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
         </div>
 
         <div className="border-t border-slate-200/80 bg-white px-4 py-2">
-          <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-            <AlertCircle className="h-3.5 w-3.5 text-slate-400" />
-            {t.popupFooter}
-          </div>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-3">
+            <div
+              title={providerModel}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600"
+            >
+              <img src={providerIcon} alt={provider} className="h-3.5 w-3.5 object-contain" />
+              {provider}
+            </div>
             <LanguagePills currentLang={uiLang} onChange={changeLang} />
           </div>
         </div>
@@ -191,7 +208,7 @@ export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang
             </div>
             <div className="space-y-2 text-sm text-slate-700">
               <p><span className="font-semibold">{t.authorLabel}:</span> Triết Bùi</p>
-              <p><span className="font-semibold">GitHub:</span> <a className="text-teal-700 underline" href="https://github.com/bmtriet/kodaukovui">github.com/bmtriet/kodaukovui</a></p>
+              <p><span className="font-semibold">GitHub:</span> <a className="text-teal-700 underline" href="https://github.com/bmtriet/clipBo">github.com/bmtriet/clipBo</a></p>
               <p><span className="font-semibold">Facebook:</span> <a className="text-teal-700 underline" href="https://fb.me/trietbui89">fb.me/trietbui89</a></p>
               <p><span className="font-semibold">Email:</span> <a className="text-teal-700 underline" href="mailto:minhtrietbui@live.com">minhtrietbui@live.com</a></p>
             </div>

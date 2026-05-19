@@ -68,7 +68,7 @@ pub fn run() {
             commands::platform_summary,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running KoDauKoVui");
+        .expect("error while running clipBo");
 }
 
 fn normalize_shortcut(value: &str) -> String {

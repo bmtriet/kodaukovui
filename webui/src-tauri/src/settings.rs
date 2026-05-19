@@ -134,7 +134,7 @@ pub fn default_settings() -> GeneralSettings {
 }
 
 fn app_data_dir() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|dir| dir.join("KoDauKoVui"))
+    dirs::data_local_dir().map(|dir| dir.join("clipBo"))
 }
 
 fn read_snapshot(data_dir: &PathBuf) -> Result<SettingsSnapshot, SettingsError> {
