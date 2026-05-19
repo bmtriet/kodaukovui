@@ -1,6 +1,7 @@
 use std::{
     fs,
     process::Command,
+    sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -507,9 +508,16 @@ fn rgba_to_png(image: &ImageData<'_>) -> Result<Vec<u8>, NativeError> {
 fn ensure_screen_capture_permission() {
     #[cfg(target_os = "macos")]
     unsafe {
+        static DID_OPEN_SCREEN_RECORDING_SETTINGS: AtomicBool = AtomicBool::new(false);
+
         if !macos_screen_capture_preflight() {
-            let _ = macos_screen_capture_request();
-            open_screen_recording_settings();
+            let granted = macos_screen_capture_request();
+            let now_granted = granted || macos_screen_capture_preflight();
+            if !now_granted
+                && !DID_OPEN_SCREEN_RECORDING_SETTINGS.swap(true, Ordering::SeqCst)
+            {
+                open_screen_recording_settings();
+            }
         }
     }
 }

@@ -1,13 +1,17 @@
-import { useEffect, useMemo } from "react"
-import { AlertCircle, Bot, Globe2, Image, Settings, Sparkles, Type, X } from "lucide-react"
-import { parsePayload, type PopupItem, type PopupPayload, type PopupSection } from "../types"
+import { useEffect, useMemo, useState } from "react"
+import { AlertCircle, Bot, CircleHelp, Globe2, Image, Settings, Sparkles, Type, X } from "lucide-react"
+import { parsePayload, type PopupItem, type PopupPayload, type PopupSection, type UiLanguage } from "../types"
 import { isEditableTarget, isImeComposing } from "../types"
+import { waitForDesktopApi } from "../types"
+import { LanguagePills } from "../components/LanguagePills"
 import type { EnTranslations } from "../i18n"
 
-export function PopupPage({ t }: { t: EnTranslations }) {
+export function PopupPage({ t, uiLang, changeLang }: { t: EnTranslations; uiLang: UiLanguage; changeLang: (newLang: UiLanguage) => void }) {
   const payload = useMemo(() => parsePayload<PopupPayload>(), [])
   const sections = payload.sections || []
   const popupItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
+  const [provider, setProvider] = useState("gemini")
+  const [showAbout, setShowAbout] = useState(false)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -24,6 +28,20 @@ export function PopupPage({ t }: { t: EnTranslations }) {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [popupItems])
+
+  useEffect(() => {
+    let mounted = true
+    const hydrateProvider = async () => {
+      const api = await waitForDesktopApi()
+      const snapshot = await api.getSettingsSnapshot()
+      if (!mounted) return
+      setProvider((snapshot?.settings?.AI_PROVIDER || "gemini").toLowerCase())
+    }
+    hydrateProvider().catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const renderQuickTranslate = (section: PopupSection) => (
     <div className="grid grid-cols-3 gap-2">
@@ -111,25 +129,32 @@ export function PopupPage({ t }: { t: EnTranslations }) {
   }
 
   return (
-    <div className="h-screen bg-transparent p-2.5 font-sans text-slate-900">
-      <div className="flex h-full flex-col overflow-hidden rounded-[1.35rem] border border-slate-200/80 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+    <div className="h-screen bg-white font-sans text-slate-900">
+      <div className="flex h-full flex-col overflow-hidden border border-slate-200/80 bg-white">
         <div className="desktop-drag-region flex cursor-move items-center border-b border-slate-200/80 px-3 py-3">
           <div className="mr-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-100">
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-xl font-bold text-slate-800">{t.popupTitle}</h2>
-            <p className="truncate text-xs text-slate-500">{t.popupSubtitle}</p>
+            <p className="truncate text-xs text-slate-500">{t.popupSubtitle} · {t.currentProvider}: {provider}</p>
           </div>
           <button
-            aria-label="Open settings"
-            onClick={() => window.desktopApi?.openSettings()}
+            aria-label={t.about}
+            onClick={() => setShowAbout(true)}
             className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-600"
+          >
+            <CircleHelp className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            aria-label={t.openSettings}
+            onClick={() => window.desktopApi?.openSettings()}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-600"
           >
             <Settings className="h-[18px] w-[18px]" />
           </button>
           <button
-            aria-label="Close popup"
+            aria-label={t.closePopup}
             onClick={() => window.desktopApi?.cancelPopup()}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
           >
@@ -142,12 +167,38 @@ export function PopupPage({ t }: { t: EnTranslations }) {
         </div>
 
         <div className="border-t border-slate-200/80 bg-white px-4 py-2">
-          <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+          <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
             <AlertCircle className="h-3.5 w-3.5 text-slate-400" />
             {t.popupFooter}
           </div>
+          <div className="flex justify-end">
+            <LanguagePills currentLang={uiLang} onChange={changeLang} />
+          </div>
         </div>
       </div>
+      {showAbout ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="w-full max-w-lg border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">{t.aboutTitle}</h3>
+              <button
+                aria-label={t.close}
+                onClick={() => setShowAbout(false)}
+                className="flex h-7 w-7 items-center justify-center text-slate-500 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm text-slate-700">
+              <p><span className="font-semibold">{t.authorLabel}:</span> Triết Bùi</p>
+              <p><span className="font-semibold">GitHub:</span> <a className="text-teal-700 underline" href="https://github.com/bmtriet/kodaukovui">github.com/bmtriet/kodaukovui</a></p>
+              <p><span className="font-semibold">Facebook:</span> <a className="text-teal-700 underline" href="https://fb.me/trietbui89">fb.me/trietbui89</a></p>
+              <p><span className="font-semibold">Email:</span> <a className="text-teal-700 underline" href="mailto:minhtrietbui@live.com">minhtrietbui@live.com</a></p>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">{t.aboutContributeHint}</p>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -112,7 +112,7 @@ export function SettingsPage({
     const response = await window.desktopApi?.saveSettingsSnapshot(JSON.stringify(payload))
     if (!response?.ok) {
       setSaving(false)
-      setError(response?.error || "Failed to save settings.")
+      setError(response?.error || t.saveSettingsError)
       return
     }
 
@@ -190,7 +190,7 @@ export function SettingsPage({
                 <select
                   value={settings.UI_LANGUAGE}
                   onChange={(e) => updateField("UI_LANGUAGE", e.target.value as UiLanguage)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm leading-5 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
                 >
                   <option value="en">English</option>
                   <option value="vi">Tiếng Việt</option>
@@ -211,34 +211,58 @@ export function SettingsPage({
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.providerLabel}</label>
                 <select
                   value={settings.AI_PROVIDER}
-                  onChange={(e) => updateField("AI_PROVIDER", e.target.value as "gemini" | "openai")}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+                  onChange={(e) => updateField("AI_PROVIDER", e.target.value as "gemini" | "openai" | "ollama")}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm leading-5 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
                 >
                   <option value="gemini">Gemini</option>
                   <option value="openai">OpenAI</option>
+                  <option value="ollama">Ollama</option>
                 </select>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.geminiModel}</label>
-                <InputField value={settings.GEMINI_MODEL} onChange={(e) => updateField("GEMINI_MODEL", e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.geminiKey}</label>
-                <InputField type="password" value={settings.GEMINI_API_KEY} onChange={(e) => updateField("GEMINI_API_KEY", e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiModel}</label>
-                <InputField value={settings.OPENAI_MODEL} onChange={(e) => updateField("OPENAI_MODEL", e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiKey}</label>
-                <InputField type="password" value={settings.OPENAI_API_KEY} onChange={(e) => updateField("OPENAI_API_KEY", e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiBase}</label>
-                <InputField value={settings.OPENAI_API_BASE} onChange={(e) => updateField("OPENAI_API_BASE", e.target.value)} />
-              </div>
+              {settings.AI_PROVIDER === "gemini" ? (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.geminiModel}</label>
+                    <InputField value={settings.GEMINI_MODEL} onChange={(e) => updateField("GEMINI_MODEL", e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.geminiKey}</label>
+                    <InputField type="password" value={settings.GEMINI_API_KEY} onChange={(e) => updateField("GEMINI_API_KEY", e.target.value)} />
+                  </div>
+                </>
+              ) : null}
+              {settings.AI_PROVIDER === "openai" ? (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiModel}</label>
+                    <InputField value={settings.OPENAI_MODEL} onChange={(e) => updateField("OPENAI_MODEL", e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiKey}</label>
+                    <InputField type="password" value={settings.OPENAI_API_KEY} onChange={(e) => updateField("OPENAI_API_KEY", e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.openaiBase}</label>
+                    <InputField value={settings.OPENAI_API_BASE} onChange={(e) => updateField("OPENAI_API_BASE", e.target.value)} />
+                  </div>
+                </>
+              ) : null}
+              {settings.AI_PROVIDER === "ollama" ? (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.ollamaModel}</label>
+                    <InputField value={settings.OLLAMA_MODEL} onChange={(e) => updateField("OLLAMA_MODEL", e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.ollamaBase}</label>
+                    <InputField value={settings.OLLAMA_API_BASE} onChange={(e) => updateField("OLLAMA_API_BASE", e.target.value)} />
+                  </div>
+                </>
+              ) : null}
             </div>
+            {settings.AI_PROVIDER === "ollama" ? (
+              <ToggleField checked={settings.OLLAMA_THINKING} onChange={(value) => updateField("OLLAMA_THINKING", value)} label={t.ollamaThinking} />
+            ) : null}
           </SectionCard>
 
           <SectionCard title={t.builtins} icon={<Bot className="h-4 w-4" />}>
@@ -281,6 +305,7 @@ export function SettingsPage({
                 <BuiltinHotkeyEditor
                   key={action.id}
                   action={action}
+                  t={t}
                   onChange={(next) =>
                     onBuiltinActionsChange((prev) => prev.map((item) => (item.id === next.id ? next : item)))
                   }
@@ -357,9 +382,6 @@ export function SettingsPage({
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div className="text-sm text-slate-500">{error ? error : t.settingsSaveHint}</div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.desktopApi?.closeSettings(false)}>
-              {t.close}
-            </Button>
             <Button size="sm" onClick={saveAll} disabled={saving} className="bg-teal-600 text-white hover:bg-teal-700">
               <Save className="mr-1.5 h-3.5 w-3.5" />
               {t.saveAll}

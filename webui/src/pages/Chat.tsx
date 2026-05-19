@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { AlertCircle, Send, Sparkles, X } from "lucide-react"
+import { AlertCircle, Check, ChevronDown, Copy, Send, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { LanguagePills } from "../components/LanguagePills"
+import Markdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import type { UiLanguage, ChatSession } from "../types"
 import { waitForDesktopApi } from "../types"
 import type { EnTranslations } from "../i18n"
@@ -24,7 +26,10 @@ export function ChatPage({
   const [insertSuccess, setInsertSuccess] = useState("")
   const [isComposing, setIsComposing] = useState(false)
   const [compositionLockedUntil, setCompositionLockedUntil] = useState(0)
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [menuOpenIndex, setMenuOpenIndex] = useState<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (document.activeElement !== textareaRef.current) {
@@ -102,6 +107,31 @@ export function ChatPage({
     }
   }
 
+  const copyMessage = async (content: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedIndex(index)
+      setMenuOpenIndex((prev) => (prev === index ? null : prev))
+      window.setTimeout(() => setCopiedIndex((prev) => (prev === index ? null : prev)), 1200)
+    } catch {
+      setError(t.chatErrorFallback)
+    }
+  }
+
+  const toPlainText = (markdown: string) =>
+    markdown
+      .replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, ""))
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/[*_~>#-]/g, "")
+      .trim()
+
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    scroller.scrollTop = scroller.scrollHeight
+  }, [session, sending])
+
   return (
     <div className="flex h-screen flex-col bg-slate-50 font-sans text-slate-900">
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
@@ -130,7 +160,7 @@ export function ChatPage({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
             {t.chatLoading}
@@ -146,12 +176,56 @@ export function ChatPage({
                     : "ml-auto bg-teal-600 text-white"
                 }`}
               >
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide opacity-70">
-                  {message.role === "assistant" ? "AI" : "You"}
+                <div className="mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-70">
+                  <span>{message.role === "assistant" ? t.chatRoleAi : t.chatRoleYou}</span>
+                  {message.role === "assistant" ? (
+                    <div className="relative">
+                      <button
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-50"
+                        onClick={() => setMenuOpenIndex((prev) => (prev === index ? null : index))}
+                      >
+                        {copiedIndex === index ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        {copiedIndex === index ? t.copied : t.copy}
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                      {menuOpenIndex === index ? (
+                        <div className="absolute right-0 z-10 mt-1 min-w-40 border border-slate-200 bg-white text-[10px] font-semibold text-slate-700 shadow-lg">
+                          <button
+                            className="block w-full px-2 py-1.5 text-left hover:bg-slate-50"
+                            onClick={() => void copyMessage(message.content, index)}
+                          >
+                            {t.copy}
+                          </button>
+                          <button
+                            className="block w-full px-2 py-1.5 text-left hover:bg-slate-50"
+                            onClick={() => void copyMessage(toPlainText(message.content), index)}
+                          >
+                            {t.copyPlain}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-                <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                {message.role === "assistant" ? (
+                  <div className="break-words leading-relaxed [&_a]:text-teal-700 [&_a]:underline [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-slate-100 [&_pre]:p-2">
+                    <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                )}
               </div>
             ))}
+            {sending ? (
+              <div className="max-w-[85%] rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide opacity-70">{t.chatRoleAi}</div>
+                <div className="inline-flex items-center gap-1">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400 [animation-delay:0ms]" />
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400 [animation-delay:180ms]" />
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400 [animation-delay:360ms]" />
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">

@@ -4,11 +4,18 @@ KoDauKoVui là desktop app React/Vite + Tauri/Rust để xử lý selected text 
 
 ## Tính năng chính
 - Popup hotkey toàn cục để chọn smart action.
+- Icon `About` ngay trên popup để mở thông tin tác giả và kênh liên lạc/contribute.
 - Smart Action CRUD trong Settings.
 - Built-in `AI Prompt` và `Ask by Image`, hỗ trợ one-shot hoặc chat tiếp trên cùng context.
-- Rust AI runtime cho Gemini và OpenAI-compatible API.
+- Rust AI runtime cho Gemini, OpenAI-compatible API, và Ollama.
 - Rust clipboard/pasteback và macOS ROI capture qua native `screencapture`.
 - Tự import cấu hình cũ lần đầu từ `.env`, `smart_actions.json`, `brain.md`, `history.json` nếu các file đó còn ở repo root.
+
+## Tác giả & liên hệ
+- Tác giả: **Triết Bùi**
+- GitHub: [bmtriet/kodaukovui](https://github.com/bmtriet/kodaukovui)
+- Facebook: [fb.me/trietbui89](https://fb.me/trietbui89)
+- Email: [minhtrietbui@live.com](mailto:minhtrietbui@live.com)
 
 ## Chạy dev
 

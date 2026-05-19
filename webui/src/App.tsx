@@ -72,7 +72,7 @@ export default function App() {
   const t = getTranslations(lang)
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading...</div>
+    return <div className="flex h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">{t.appLoading}</div>
   }
 
   if (loadError) {
@@ -84,7 +84,7 @@ export default function App() {
   }
 
   if (page === "popup") {
-    return <PopupPage t={t} />
+    return <PopupPage t={t} uiLang={lang} changeLang={changeLang} />
   }
 
   if (page === "settings") {

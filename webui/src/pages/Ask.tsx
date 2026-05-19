@@ -79,20 +79,20 @@ export function AskPage({
       </div>
 
       {payload.responseModeEnabled ? (
-        <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+        <div className="mb-3 flex items-center justify-between border border-slate-200 bg-white px-3 py-2.5">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t.responseMode}</div>
-          <div className="flex gap-1.5 rounded-md bg-slate-100 p-1">
+          <div className="flex gap-1">
             <button
               type="button"
               onClick={() => setResponseMode("paste")}
-              className={`rounded px-3 py-1.5 text-sm ${responseMode === "paste" ? "bg-teal-600 text-white shadow-sm" : "text-slate-700 hover:bg-white"}`}
+              className={`px-3 py-1.5 text-sm ${responseMode === "paste" ? "bg-teal-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
             >
               {t.responsePaste}
             </button>
             <button
               type="button"
               onClick={() => setResponseMode("chat")}
-              className={`rounded px-3 py-1.5 text-sm ${responseMode === "chat" ? "bg-teal-600 text-white shadow-sm" : "text-slate-700 hover:bg-white"}`}
+              className={`px-3 py-1.5 text-sm ${responseMode === "chat" ? "bg-teal-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
             >
               {t.responseChat}
             </button>

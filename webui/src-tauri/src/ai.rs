@@ -61,6 +61,8 @@ pub enum AiError {
 pub fn has_configured_token(settings: &GeneralSettings) -> bool {
     if settings.ai_provider == "openai" {
         !settings.openai_api_key.trim().is_empty()
+    } else if settings.ai_provider == "ollama" {
+        !settings.ollama_model.trim().is_empty()
     } else {
         !settings.gemini_api_key.trim().is_empty()
     }
@@ -69,6 +71,8 @@ pub fn has_configured_token(settings: &GeneralSettings) -> bool {
 pub async fn call_text(settings: &GeneralSettings, prompt: &str) -> Result<String, AiError> {
     if settings.ai_provider == "openai" {
         call_openai_text(settings, prompt).await
+    } else if settings.ai_provider == "ollama" {
+        call_ollama_text(settings, prompt).await
     } else {
         call_gemini_text(settings, prompt).await
     }
@@ -81,6 +85,8 @@ pub async fn call_image(
 ) -> Result<String, AiError> {
     if settings.ai_provider == "openai" {
         call_openai_image(settings, prompt, image).await
+    } else if settings.ai_provider == "ollama" {
+        Err(AiError::Provider("Ollama image asking is not supported yet.".to_string()))
     } else {
         call_gemini_image(settings, prompt, image).await
     }
@@ -92,8 +98,79 @@ pub async fn call_chat_turn(
 ) -> Result<String, AiError> {
     if settings.ai_provider == "openai" {
         call_openai_chat(settings, session).await
+    } else if settings.ai_provider == "ollama" {
+        call_ollama_chat(settings, session).await
     } else {
         call_gemini_chat(settings, session).await
+    }
+}
+
+async fn call_ollama_text(settings: &GeneralSettings, prompt: &str) -> Result<String, AiError> {
+    ensure_ollama(settings)?;
+    post_ollama(
+        settings,
+        json!({
+            "model": settings.ollama_model.trim(),
+            "messages": [{ "role": "user", "content": prompt }],
+            "think": settings.ollama_thinking,
+            "stream": false
+        }),
+    )
+    .await
+}
+
+async fn call_ollama_chat(
+    settings: &GeneralSettings,
+    session: &ChatSession,
+) -> Result<String, AiError> {
+    ensure_ollama(settings)?;
+    let mut messages = Vec::new();
+    if session.kind == "ai_prompt" {
+        if let Some(selected_text) = session.selected_text.as_deref().filter(|s| !s.trim().is_empty()) {
+            messages.push(json!({
+                "role": "system",
+                "content": format!("[SELECTED TEXT]\n{}\n[END SELECTED TEXT]", selected_text)
+            }));
+        }
+    } else {
+        messages.push(json!({
+            "role": "system",
+            "content": "Answer questions about screenshot/image context naturally."
+        }));
+    }
+    for message in &session.messages {
+        messages.push(json!({ "role": message.role, "content": message.content }));
+    }
+    post_ollama(
+        settings,
+        json!({
+            "model": settings.ollama_model.trim(),
+            "messages": messages,
+            "think": settings.ollama_thinking,
+            "stream": false
+        }),
+    )
+    .await
+}
+
+async fn post_ollama(settings: &GeneralSettings, body: serde_json::Value) -> Result<String, AiError> {
+    let url = format!("{}/api/chat", settings.ollama_api_base.trim_end_matches('/'));
+    let value: serde_json::Value = reqwest::Client::new()
+        .post(url)
+        .json(&body)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    if let Some(error) = value["error"].as_str() {
+        return Err(AiError::Provider(error.to_string()));
+    }
+    let text = value["message"]["content"].as_str().unwrap_or("").trim().to_string();
+    if text.is_empty() {
+        Err(AiError::EmptyResponse)
+    } else {
+        Ok(text)
     }
 }
 
@@ -331,6 +408,14 @@ fn ensure_openai(settings: &GeneralSettings) -> Result<(), AiError> {
 fn ensure_gemini(settings: &GeneralSettings) -> Result<(), AiError> {
     let key = settings.gemini_api_key.trim();
     if key.is_empty() || key == "your_gemini_token_here" {
+        Err(AiError::MissingProvider)
+    } else {
+        Ok(())
+    }
+}
+
+fn ensure_ollama(settings: &GeneralSettings) -> Result<(), AiError> {
+    if settings.ollama_model.trim().is_empty() {
         Err(AiError::MissingProvider)
     } else {
         Ok(())

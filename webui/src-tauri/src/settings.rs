@@ -28,6 +28,12 @@ pub struct GeneralSettings {
     pub openai_model: String,
     #[serde(rename = "OPENAI_API_BASE")]
     pub openai_api_base: String,
+    #[serde(rename = "OLLAMA_MODEL")]
+    pub ollama_model: String,
+    #[serde(rename = "OLLAMA_THINKING")]
+    pub ollama_thinking: bool,
+    #[serde(rename = "OLLAMA_API_BASE")]
+    pub ollama_api_base: String,
     #[serde(rename = "HOTKEY_POPUP")]
     pub hotkey_popup: String,
     #[serde(rename = "UI_LANGUAGE")]
@@ -118,6 +124,9 @@ pub fn default_settings() -> GeneralSettings {
         openai_api_key: String::new(),
         openai_model: "gpt-4o-mini".to_string(),
         openai_api_base: "https://api.openai.com/v1".to_string(),
+        ollama_model: "gemma4:e2b".to_string(),
+        ollama_thinking: false,
+        ollama_api_base: "http://127.0.0.1:11434".to_string(),
         hotkey_popup: default_popup_hotkey(),
         ui_language: "en".to_string(),
         debug: false,
@@ -196,6 +205,20 @@ fn import_legacy_settings(values: &HashMap<String, String>) -> GeneralSettings {
             .filter(|value| !value.trim().is_empty())
             .cloned()
             .unwrap_or(default.openai_api_base),
+        ollama_model: values
+            .get("OLLAMA_MODEL")
+            .filter(|value| !value.trim().is_empty())
+            .cloned()
+            .unwrap_or(default.ollama_model),
+        ollama_thinking: values
+            .get("OLLAMA_THINKING")
+            .map(|value| value.trim().eq_ignore_ascii_case("true"))
+            .unwrap_or(default.ollama_thinking),
+        ollama_api_base: values
+            .get("OLLAMA_API_BASE")
+            .filter(|value| !value.trim().is_empty())
+            .cloned()
+            .unwrap_or(default.ollama_api_base),
         hotkey_popup: values
             .get("HOTKEY_POPUP")
             .filter(|value| !value.trim().is_empty())
@@ -298,7 +321,7 @@ fn normalize_popup_hotkey(value: &str) -> String {
 
 fn normalize_provider(value: Option<&String>, default: &str) -> String {
     match value.map(|value| value.trim().to_lowercase()) {
-        Some(value) if value == "gemini" || value == "openai" => value,
+        Some(value) if value == "gemini" || value == "openai" || value == "ollama" => value,
         _ => default.to_string(),
     }
 }

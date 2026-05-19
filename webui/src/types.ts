@@ -7,12 +7,15 @@ export type LauncherRunMode = "direct" | "prompt" | "config"
 export type PopupSectionId = "quick_translate" | "ai_tools" | "text_tools" | "other_actions"
 
 export type GeneralSettings = {
-  AI_PROVIDER: "gemini" | "openai"
+  AI_PROVIDER: "gemini" | "openai" | "ollama"
   GEMINI_API_KEY: string
   GEMINI_MODEL: string
   OPENAI_API_KEY: string
   OPENAI_MODEL: string
   OPENAI_API_BASE: string
+  OLLAMA_MODEL: string
+  OLLAMA_THINKING: boolean
+  OLLAMA_API_BASE: string
   HOTKEY_POPUP: string
   UI_LANGUAGE: UiLanguage
   DEBUG: boolean
@@ -142,6 +145,9 @@ export const defaultSettings: GeneralSettings = {
   OPENAI_API_KEY: "",
   OPENAI_MODEL: "gpt-4o-mini",
   OPENAI_API_BASE: "https://api.openai.com/v1",
+  OLLAMA_MODEL: "gemma4:e2b",
+  OLLAMA_THINKING: false,
+  OLLAMA_API_BASE: "http://127.0.0.1:11434",
   HOTKEY_POPUP: "<ctrl>+'",
   UI_LANGUAGE: "en",
   DEBUG: false,
