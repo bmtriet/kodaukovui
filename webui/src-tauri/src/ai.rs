@@ -44,6 +44,8 @@ pub struct ChatSession {
     pub image_payload: Option<ImagePayload>,
     pub initial_user_prompt: Option<String>,
     pub target_window_id: Option<String>,
+    #[serde(default)]
+    pub loading: bool,
 }
 
 #[derive(Debug, thiserror::Error)]

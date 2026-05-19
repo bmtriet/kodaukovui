@@ -25,6 +25,7 @@ export function ChatPage({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
   const [insertSuccess, setInsertSuccess] = useState("")
+  const [sessionLoading, setSessionLoading] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
   const [compositionLockedUntil, setCompositionLockedUntil] = useState(0)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
@@ -33,6 +34,27 @@ export function ChatPage({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bootstrapStartedRef = useRef(false)
+
+  useEffect(() => {
+    if (!sessionLoading) return
+    let mounted = true
+    const poll = async () => {
+      while (mounted) {
+        await new Promise((r) => window.setTimeout(r, 600))
+        const api = window.desktopApi
+        if (!api) continue
+        const state = await api.getChatState()
+        if (!mounted) break
+        if (state?.ok && state.session && !state.session.loading) {
+          setSession(state.session)
+          setSessionLoading(false)
+          break
+        }
+      }
+    }
+    poll().catch(() => {})
+    return () => { mounted = false }
+  }, [sessionLoading])
 
   useEffect(() => {
     if (document.activeElement !== textareaRef.current) {
@@ -52,6 +74,7 @@ export function ChatPage({
       if (initialState?.ok) {
         const initialSession = initialState.session || null
         setSession(initialSession)
+        setSessionLoading(initialSession?.loading || false)
         setLoading(false)
         setSending(Boolean(initialSession?.messages?.length && !initialSession.latest_reply))
       }
@@ -61,7 +84,9 @@ export function ChatPage({
       if (!response?.ok) {
         setError(response?.error || t.chatErrorFallback)
       } else {
-        setSession(response.session || null)
+        const newSession = response.session || null
+        setSession(newSession)
+        setSessionLoading(newSession?.loading || false)
       }
       setLoading(false)
     }
@@ -199,7 +224,7 @@ export function ChatPage({
               >
                 <div className="mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-70">
                   <span>{message.role === "assistant" ? t.chatRoleAi : t.chatRoleYou}</span>
-                  {message.role === "assistant" ? (
+                  {message.role === "assistant" && !(sessionLoading && index === session.messages.length - 1) ? (
                     <div className="relative">
                       <button
                         className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-50"
@@ -230,7 +255,15 @@ export function ChatPage({
                 </div>
                 {message.role === "assistant" ? (
                   <div className="break-words leading-relaxed [&_a]:text-teal-700 [&_a]:underline [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-slate-100 [&_pre]:p-2">
-                    <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                    {sessionLoading && index === session.messages.length - 1 ? (
+                      <div className="flex items-center gap-1.5 py-1">
+                        <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-teal-500 [animation-delay:0ms]" />
+                        <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-teal-500 [animation-delay:150ms]" />
+                        <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-teal-500 [animation-delay:300ms]" />
+                      </div>
+                    ) : (
+                      <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -284,6 +317,7 @@ export function ChatPage({
           ref={textareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          disabled={sessionLoading}
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => {
             setIsComposing(false)
@@ -300,14 +334,14 @@ export function ChatPage({
         <div className="mt-2 text-xs text-slate-500">{t.enterNewLineHint}</div>
 
         <div className="mt-3 flex items-center justify-between gap-2">
-          <Button variant="outline" onClick={insertLatestReply} disabled={!session?.latest_reply}>
+          <Button variant="outline" onClick={insertLatestReply} disabled={!session?.latest_reply || sessionLoading}>
             {t.insertLatestReply}
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => window.desktopApi?.closeChat()}>
               {t.close}
             </Button>
-            <Button onClick={() => void send()} disabled={sending || !draft.trim()}>
+            <Button onClick={() => void send()} disabled={sending || !draft.trim() || sessionLoading}>
               <Send className="mr-1.5 h-3.5 w-3.5" />
               {t.send}
             </Button>

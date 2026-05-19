@@ -295,25 +295,32 @@ fn response_payload(title: &str, content: &str, source: &str) -> serde_json::Val
     })
 }
 
-fn loading_response_payload(title: &str) -> serde_json::Value {
-    json!({
-        "title": title,
-        "content": "",
-        "source": "",
-        "loading": true,
-    })
-}
-
-fn show_loading_response(app: &AppHandle, ui_language: &str) -> Result<(), String> {
-    windowing::show_page(
-        app,
-        Page::Response,
-        ui_language,
-        loading_response_payload("clipBo"),
-        None,
-        None,
-    )
-    .map(|_| ())
+fn show_loading_chat(
+    app: &AppHandle,
+    runtime: &RuntimeState,
+    ui_language: &str,
+    user_prompt: &str,
+    session_kind: &str,
+    session_title: &str,
+) -> Result<(), String> {
+    let session = ChatSession {
+        kind: session_kind.to_string(),
+        title: session_title.to_string(),
+        messages: vec![
+            ChatMessage { role: "user".to_string(), content: user_prompt.to_string() },
+            ChatMessage { role: "assistant".to_string(), content: "…".to_string() },
+        ],
+        latest_reply: "…".to_string(),
+        context_hint: "Waiting for AI response…".to_string(),
+        selected_text: None,
+        image_payload: None,
+        initial_user_prompt: Some(user_prompt.to_string()),
+        target_window_id: None,
+        loading: true,
+    };
+    runtime.set_chat_session(session);
+    windowing::show_page(app, Page::Chat, ui_language, json!({}), None, None)
+        .map(|_| ())
 }
 
 fn show_response_dialog(app: &AppHandle, ui_language: &str, title: &str, content: &str, source: &str) -> Result<(), String> {
@@ -381,6 +388,7 @@ fn deliver_text_result(
             image_payload: None,
             initial_user_prompt: Some(user_prompt.to_string()),
             target_window_id,
+            loading: false,
         };
         runtime.set_chat_session(session);
         windowing::show_page(app, Page::Chat, &snapshot.settings.ui_language, json!({}), None, None)?;
@@ -447,7 +455,7 @@ async fn process_smart_action(
     );
     let show_loading = check_should_show_loading(&snapshot, target_window_id.as_deref());
     if show_loading {
-        let _ = show_loading_response(&app, &snapshot.settings.ui_language);
+        let _ = show_loading_chat(&app, runtime, &snapshot.settings.ui_language, &action.name, "smart_action", &action.name);
     }
     let mut result = ai::call_text(&snapshot.settings, &prompt)
         .await
@@ -525,6 +533,7 @@ async fn process_ai_prompt(
             image_payload: None,
             initial_user_prompt: Some(ask.prompt),
             target_window_id,
+            loading: false,
         };
         runtime.set_chat_session(session);
         windowing::show_page(&app, Page::Chat, &snapshot.settings.ui_language, json!({}), None, None)?;
@@ -533,7 +542,7 @@ async fn process_ai_prompt(
     let prompt = prompts::build_ai_prompt_first_turn(&brain_context(settings_state), &selected_text, &ask.prompt);
     let show_loading = check_should_show_loading(&snapshot, target_window_id.as_deref());
     if show_loading {
-        let _ = show_loading_response(&app, &snapshot.settings.ui_language);
+        let _ = show_loading_chat(&app, runtime, &snapshot.settings.ui_language, &ask.prompt, "ai_prompt", "AI Prompt");
     }
     let result = ai::call_text(&snapshot.settings, &prompt)
         .await
@@ -596,6 +605,7 @@ async fn process_image_ask(
             image_payload: Some(image),
             initial_user_prompt: Some(ask.prompt),
             target_window_id,
+            loading: false,
         };
         runtime.set_chat_session(session);
         windowing::show_page(&app, Page::Chat, &snapshot.settings.ui_language, json!({}), None, None)?;
@@ -604,7 +614,7 @@ async fn process_image_ask(
     let prompt = prompts::build_image_question_prompt(&brain_context(settings_state), &ask.prompt);
     let show_loading = check_should_show_loading(&snapshot, target_window_id.as_deref());
     if show_loading {
-        let _ = show_loading_response(&app, &snapshot.settings.ui_language);
+        let _ = show_loading_chat(&app, runtime, &snapshot.settings.ui_language, &ask.prompt, "image_ask", "Ask by Image");
     }
     let result = ai::call_image(&snapshot.settings, &prompt, &image)
         .await

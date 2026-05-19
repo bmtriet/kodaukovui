@@ -82,6 +82,7 @@ export type ChatSession = {
   image_payload?: ImagePayload
   initial_user_prompt?: string
   target_window_id?: string
+  loading?: boolean
 }
 
 export type ImagePayload = {
