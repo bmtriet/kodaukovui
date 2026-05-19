@@ -130,7 +130,7 @@ export type PopupPayload = {
 }
 
 export type DesktopApi = {
-  submitAsk: (prompt: string, responseMode?: string) => void
+  submitAsk: (prompt: string, responseMode?: string, contextCleared?: boolean) => void
   cancelAsk: () => void
   retakeImageForAsk: () => Promise<{ ok: boolean; error?: string }>
   getAskImageContext: () => Promise<{ ok: boolean; error?: string; image_payload?: ImagePayload }>

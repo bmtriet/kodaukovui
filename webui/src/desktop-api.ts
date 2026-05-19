@@ -3,7 +3,7 @@ import type { SettingsSnapshot, SaveSnapshotResponse, ChatApiResponse, DesktopAp
 
 function createTauriApi(): DesktopApi {
   return {
-    submitAsk: (prompt, responseMode) => invoke("submit_ask", { prompt, responseMode }),
+    submitAsk: (prompt, responseMode, contextCleared) => invoke("submit_ask", { prompt, responseMode, contextCleared }),
     cancelAsk: () => invoke("cancel_ask"),
     retakeImageForAsk: () => invoke<{ ok: boolean; error?: string }>("retake_image_for_ask"),
     getAskImageContext: () => invoke("get_ask_image_context"),

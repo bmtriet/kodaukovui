@@ -406,6 +406,7 @@ async fn process_ai_prompt(
         }),
     )
     .await?;
+    let selected_text = if ask.context_cleared { String::new() } else { selected_text };
     if ask.prompt.trim().is_empty() {
         return Ok(());
     }
@@ -520,6 +521,7 @@ async fn capture_image_context() -> Result<ImagePayload, String> {
 struct AskResult {
     prompt: String,
     response_mode: String,
+    context_cleared: bool,
 }
 
 async fn ask_user(
@@ -551,6 +553,10 @@ async fn ask_user(
             .unwrap_or("paste")
             .trim()
             .to_lowercase(),
+        context_cleared: response
+            .get("context_cleared")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
     })
 }
 

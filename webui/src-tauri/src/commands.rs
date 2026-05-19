@@ -50,12 +50,13 @@ pub fn set_ui_language(state: State<'_, AppState>, lang: String) {
 }
 
 #[tauri::command]
-pub fn submit_ask(state: State<'_, RuntimeState>, prompt: String, response_mode: Option<String>) {
+pub fn submit_ask(state: State<'_, RuntimeState>, prompt: String, response_mode: Option<String>, context_cleared: Option<bool>) {
     state.answer_pending(
         Page::Ask,
         json!({
             "prompt": prompt,
-            "response_mode": response_mode.unwrap_or_else(|| "paste".to_string())
+            "response_mode": response_mode.unwrap_or_else(|| "paste".to_string()),
+            "context_cleared": context_cleared.unwrap_or(false),
         }),
     );
 }

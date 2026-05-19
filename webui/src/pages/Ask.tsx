@@ -17,8 +17,10 @@ export function AskPage({
   changeLang: (newLang: UiLanguage) => void
 }) {
   const payload = parsePayload<AskPayload>()
+  const [contextCleared, setContextCleared] = useState(false)
+  const effectivePromptOnly = payload.contextMode === "prompt_only" || contextCleared
   const placeholder =
-    payload.placeholder || (payload.contextMode === "prompt_only" ? t.askPlaceholderPromptOnly : t.askPlaceholder)
+    payload.placeholder || (effectivePromptOnly ? t.askPlaceholderPromptOnly : t.askPlaceholder)
   const [prompt, setPrompt] = useState("")
   const [responseMode, setResponseMode] = useState<ResponseMode>(payload.defaultResponseMode || "paste")
   const [isComposing, setIsComposing] = useState(false)
@@ -29,6 +31,7 @@ export function AskPage({
   const isPromptOnly = payload.contextMode === "prompt_only"
   const selectedText = payload.selectedText || ""
   const hasSelectedText = !isPromptOnly && !!selectedText
+  const showTextContext = hasSelectedText && !contextCleared
   const selectedLineCount = selectedText ? selectedText.split(/\n/).length : 0
   const imagePreviewUrl = imagePayload?.image_base64
     ? `data:${imagePayload.mime_type || "image/png"};base64,${imagePayload.image_base64}`
@@ -57,7 +60,7 @@ export function AskPage({
   }, [payload.imageContextAvailable])
 
   const submit = () => {
-    window.desktopApi?.submitAsk(prompt.trim(), responseMode)
+    window.desktopApi?.submitAsk(prompt.trim(), responseMode, contextCleared)
   }
 
   const takeNewShot = async () => {
@@ -95,8 +98,8 @@ export function AskPage({
             <span className="truncate">{payload.title || t.askTitle}</span>
           </h2>
           <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-500">
-            {isPromptOnly ? <MessageSquare className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-            {isPromptOnly ? t.contextPromptOnly : t.contextSelectedText}
+            {effectivePromptOnly ? <MessageSquare className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+            {effectivePromptOnly ? t.contextPromptOnly : t.contextSelectedText}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -131,13 +134,22 @@ export function AskPage({
                 </button>
               </div>
             </div>
-          ) : hasSelectedText ? (
+          ) : showTextContext ? (
             <div className="flex min-w-0 items-center gap-3 rounded-lg border border-teal-200 bg-teal-50/30 p-3 shadow-sm">
               <div className="flex h-20 w-28 shrink-0 items-center justify-center rounded-md border border-teal-200 bg-white">
                 <FileText className="h-8 w-8 text-teal-500" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Text context</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Text context</div>
+                  <button
+                    type="button"
+                    onClick={() => setContextCleared(true)}
+                    className="shrink-0 text-[10px] font-semibold text-slate-400 hover:text-red-500 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
                 <div className="mt-1 truncate text-sm font-semibold text-slate-900">
                   {selectedLineCount} {selectedLineCount === 1 ? "line" : "lines"} of selected text
                 </div>
