@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.0 — 2026-05-19
+
+### Added
+- Translate feature fix: reused cached selected text instead of re-copying after popup close, preventing silent empty-text errors.
+- Ask dialog text context preview: shows selected text snippet with line count, file icon, and Clear context button.
+- Auto-close chat dialog after inserting latest reply (400ms delay with success feedback).
+- Full i18n coverage for all new UI strings (EN/VI/ZH).
+- Automated test suite: 57 React component tests (Vitest) + 7 Rust unit tests (Cargo).
+- `test.sh` script to run both frontend and backend tests.
+- `run.sh` auto-kills stale Vite process on port 5173 before starting.
+
+### Fixed
+- AI Prompt dialog `Image context is loading...` placeholder replaced with adaptive text/image context panel.
+- Vite port mismatch: added `--strictPort` to prevent silent fallback when devUrl port is taken.
+- Popup blank/white window caused by stale Vite process on port 5173.
+
+---
+
 ## v0.2-beta — 2026-05-19
 
 ### Added
