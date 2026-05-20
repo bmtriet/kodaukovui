@@ -1,6 +1,23 @@
 # Changelog
 
-## v0.3.1 — 2026-05-19
+## v0.3.2 — 2026-05-20
+
+### Added
+- **Linux (Ubuntu) release**: AppImage + .deb packages via Tauri bundle. Full X11 native integration — no `xdotool` dependency.
+- `build_linux.sh` — one-command Linux build script with dependency checks and artifact summary.
+- Linux `.desktop` file and 256x256 icon for app launcher integration.
+- X11 native window management: `XGetInputFocus`, `XGetGeometry`, `XSetInputFocus`, `XTestFakeKeyEvent` replace all `xdotool` shell-outs.
+
+### Changed
+- Hotkey registration now normalizes single-character keys to **lowercase** — eliminates CapsLock-dependent behavior on Linux (X11 keysyms are case-sensitive).
+- Linux prerequisites simplified: removed `libxdo-dev` and `xdotool` apt dependencies.
+- `RunEvent::Reopen` migrated to `RunEvent::Opened` for Tauri v2.11.x compatibility.
+
+### Fixed
+- **Linux popup focus**: after showing, popup window now explicitly requests X11 input focus via `XSetInputFocus` — keyboard input reaches the popup immediately.
+- Icon set updated: added 256x256 PNG required for Linux AppImage bundle.
+
+---
 
 ### Changed
 - **Response dialog merged into AI Chat**: when paste is not possible, result opens in Chat with loading animation instead of a static dialog. User can continue the conversation, refine results, and copy.

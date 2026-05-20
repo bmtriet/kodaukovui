@@ -86,7 +86,8 @@ pub fn run() {
         .expect("error while building clipBo");
 
     app.run(|app, event| {
-        if let tauri::RunEvent::Reopen { .. } = event {
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+        if let tauri::RunEvent::Opened { .. } = event {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let settings = app.state::<settings::AppState>();
@@ -120,6 +121,14 @@ pub fn normalize_shortcut(value: &str) -> String {
             "CommandOrControl+Quote".to_string()
         };
     }
+
+    if let Some(last_plus) = normalized.rfind('+') {
+        let (modifiers, key) = normalized.split_at(last_plus + 1);
+        if key.len() == 1 {
+            normalized = format!("{}{}", modifiers, key.to_lowercase());
+        }
+    }
+
     normalized
 }
 

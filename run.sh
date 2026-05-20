@@ -22,7 +22,7 @@ check_linux_prereqs() {
     echo "[ERROR] pkg-config is required for Tauri Linux builds."
     echo "Install prerequisites:"
     echo "  sudo apt update"
-    echo "  sudo apt install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xdotool gnome-screenshot"
+    echo "  sudo apt install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev gnome-screenshot"
     exit 1
   fi
 
@@ -39,7 +39,7 @@ check_linux_prereqs() {
     echo
     echo "Install prerequisites:"
     echo "  sudo apt update"
-    echo "  sudo apt install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xdotool gnome-screenshot"
+    echo "  sudo apt install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev gnome-screenshot"
     exit 1
   fi
 }

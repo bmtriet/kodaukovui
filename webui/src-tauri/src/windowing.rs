@@ -113,6 +113,10 @@ pub fn show_page(
         let _ = window.request_user_attention(Some(UserAttentionType::Critical));
     }
     let _ = window.set_focus();
+    #[cfg(target_os = "linux")]
+    if matches!(page, Page::Popup) {
+        crate::native::force_focus_popup();
+    }
     Ok(window)
 }
 

@@ -500,7 +500,7 @@ dependencies = [
 
 [[package]]
 name = "clipbo"
-version = "0.3.0"
+version = "0.3.2"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -517,6 +517,7 @@ dependencies = [
  "tauri-plugin-opener",
  "thiserror 2.0.18",
  "tokio",
+ "x11",
 ]
 
 [[package]]
